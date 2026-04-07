@@ -92,7 +92,7 @@ Milestone [v0.X.0], PR: `[branch-name]`.
 4. Conventions: small commits, docstrings, tests, stdlib-only in core/db
 5. Verify: ruff, pytest, datapm --help
 6. git push -u origin [branch-name]
-7. gh pr create --title "[branch-name]" --body "## Why\n...\n## What changed\n..." --milestone "..."
+7. gh pr create --title "[branch-name]" --body "## Why\n...\n## What changed\n...\n\nCloses #[issue-number]" --milestone "..."
 8. Add the PR to the GitHub Project:
    gh project item-add [project-number] --owner @me --url [PR url]
 9. Show me what to review.
