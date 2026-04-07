@@ -1,9 +1,13 @@
-"""Enhanced CLI using Typer (optional dependency)."""
+"""Enhanced CLI using Typer + Rich (optional dependency)."""
 
 import sys
 from typing import Annotated
 
 import typer
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+from rich.text import Text
 
 app = typer.Typer(
     name="datapm",
@@ -13,6 +17,22 @@ app = typer.Typer(
 
 config_app = typer.Typer(help="Manage configuration.")
 app.add_typer(config_app, name="config")
+
+_console = Console()
+_err_console = Console(stderr=True)
+
+# Colour mapping for project status values.
+_STATUS_STYLE: dict[str, str] = {
+    "active": "bold green",
+    "paused": "yellow",
+    "done": "bold blue",
+    "archived": "dim",
+}
+
+
+def _status_text(status: str) -> Text:
+    """Return a Rich :class:`~rich.text.Text` styled for *status*."""
+    return Text(status, style=_STATUS_STYLE.get(status, ""))
 
 
 # ---------------------------------------------------------------------------
@@ -50,7 +70,7 @@ def new(
 
     optional_folders: list[str] = folders or []
     if not folders:
-        typer.echo(f"Optional folders: {', '.join(OPTIONAL_FOLDER_KEYS)}")
+        _console.print(f"[dim]Optional folders:[/] {', '.join(OPTIONAL_FOLDER_KEYS)}")
         raw = typer.prompt(
             "Add folders? (space-separated, or Enter to skip)", default=""
         )
@@ -59,8 +79,8 @@ def new(
 
     do_git: bool = git or typer.confirm("Initialise git repo?", default=False)
 
-    typer.echo()
-    typer.echo(f"Creating project '{project_name}' …")
+    _console.print()
+    _console.print(f"Creating project [bold]{project_name}[/] …")
 
     try:
         result = create_project(
@@ -72,15 +92,22 @@ def new(
             do_git_init=do_git,
         )
     except FileExistsError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        _err_console.print(f"[bold red]Error:[/] {exc}")
         sys.exit(1)
 
-    typer.echo(f"  Slug    : {result['slug']}")
-    typer.echo(f"  Path    : {result['project_path']}")
-    typer.echo(f"  Status  : {result['status']}")
+    # -- Success summary panel -----------------------------------------------
+    rows = [
+        ("Slug", result["slug"]),
+        ("Path", result["project_path"]),
+        ("Status", result["status"]),
+    ]
     if result.get("domain"):
-        typer.echo(f"  Domain  : {result['domain']}")
-    typer.echo("\nDone.")
+        rows.append(("Domain", result["domain"]))
+    if result.get("has_git_repo"):
+        rows.append(("Git", "initialised"))
+
+    summary = "\n".join(f"[dim]{label:<8}[/]  {value}" for label, value in rows)
+    _console.print(Panel(summary, title="[bold green]Project created[/]", expand=False))
 
 
 # ---------------------------------------------------------------------------
@@ -99,21 +126,24 @@ def list_cmd(
     projects = list_projects(status=status, domain=domain)
 
     if not projects:
-        typer.echo("No projects found.")
+        _console.print("[dim]No projects found.[/]")
         return
 
-    col_slug = max(len(p["slug"]) for p in projects)
-    col_status = max(len(p["status"]) for p in projects)
-    col_slug = max(col_slug, 4)
-    col_status = max(col_status, 6)
+    table = Table(show_header=True, header_style="bold", box=None, pad_edge=False)
+    table.add_column("Slug", style="cyan", no_wrap=True)
+    table.add_column("Status", no_wrap=True)
+    table.add_column("Domain", style="dim")
+    table.add_column("Title")
 
-    header = f"{'SLUG':<{col_slug}}  {'STATUS':<{col_status}}  TITLE"
-    typer.echo(header)
-    typer.echo("-" * len(header))
     for p in projects:
-        typer.echo(
-            f"{p['slug']:<{col_slug}}  {p['status']:<{col_status}}  {p['title']}"
+        table.add_row(
+            p["slug"],
+            _status_text(p["status"]),
+            p.get("domain") or "",
+            p["title"],
         )
+
+    _console.print(table)
 
 
 # ---------------------------------------------------------------------------
@@ -124,7 +154,7 @@ def list_cmd(
 @app.command()
 def search(query: Annotated[str, typer.Argument(help="Search query")]) -> None:
     """Search projects by metadata."""
-    typer.echo(f"Searching for: {query}")
+    _console.print(f"Searching for: [bold]{query}[/]")
 
 
 # ---------------------------------------------------------------------------
@@ -143,9 +173,9 @@ def config_init(
 
     try:
         path = init_config(force=force)
-        typer.echo(f"Config initialised at {path}")
+        _console.print(f"[bold green]✓[/] Config initialised at [cyan]{path}[/]")
     except FileExistsError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        _err_console.print(f"[bold red]Error:[/] {exc}")
         sys.exit(1)
 
 
