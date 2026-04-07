@@ -59,7 +59,7 @@ requires-python = ">=3.11"
 dependencies = []
 
 [project.optional-dependencies]
-enhanced = ["typer[all]"]
+enhanced = ["typer"]
 
 [project.scripts]
 datapm = "data_project_manager.cli.app:app"
