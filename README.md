@@ -134,6 +134,18 @@ uv run datapm --help       # Typer CLI
 uv run python -m data_project_manager --help  # argparse fallback
 ```
 
+A **Makefile** wraps these for convenience:
+
+```bash
+make test       # run tests
+make check      # lint + format check + tests
+make cov        # tests with coverage report
+make format     # auto-format
+make docs       # build Sphinx docs
+make clean      # remove caches and build artifacts
+make help       # list all targets
+```
+
 ## Roadmap
 
 See [docs/PLAN.md](docs/PLAN.md) for the full milestone plan.
