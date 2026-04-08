@@ -22,23 +22,25 @@
 
 ---
 
-## Milestone 1: Launcher — `v0.1.0`
+## Milestone 1: Launcher — `v0.1.0` ✅
 
 **Summary**: The core product — `datapm new` creates projects with interactive questions, folder scaffolding, metadata, and a SQLite database record. This replaces manual project setup and is immediately usable.
 
+**Status**: Released and tagged. 6 PRs merged (#1–#6), plus 2 post-release fixes (#12, #13).
+
 ### Acceptance Criteria
 
-- [ ] `python -m data_project_manager config init` creates `~/.datapm/config.json` with a default root
-- [ ] `python -m data_project_manager new` interactively asks for project name, domain, and optional folders
-- [ ] `python -m data_project_manager new "My Project" --domain healthcare` works as one-liner
-- [ ] Creates `YYYY-MM-DD_Project-Name/` with archief/, communicatie/, documenten/
-- [ ] Prompts for optional folders (data/, src/, literatuur/, resultaten/, notebooks/)
-- [ ] `project.json` is created in the project folder with all metadata
-- [ ] SQLite DB is created with `_schema_version` table and Project/ProjectRoot tables
-- [ ] Optional git init works when selected
-- [ ] `python -m data_project_manager list` shows all projects with status
-- [ ] If Typer installed, `datapm new` shows enhanced Rich-formatted interactive flow
-- [ ] All tests pass, ruff clean
+- [x] `python -m data_project_manager config init` creates `~/.datapm/config.json` with a default root
+- [x] `python -m data_project_manager new` interactively asks for project name, domain, and optional folders
+- [x] `python -m data_project_manager new "My Project" --domain healthcare` works as one-liner
+- [x] Creates `YYYY-MM-DD_Project-Name/` with archief/, communicatie/, documenten/
+- [x] Prompts for optional folders (data/, src/, literatuur/, resultaten/, notebooks/)
+- [x] `project.json` is created in the project folder with all metadata
+- [x] SQLite DB is created with `_schema_version` table and Project/ProjectRoot tables
+- [x] Optional git init works when selected
+- [x] `python -m data_project_manager list` shows all projects with status
+- [x] If Typer installed, `datapm new` shows enhanced Rich-formatted interactive flow
+- [x] All tests pass, ruff clean
 
 ### Testing Strategy
 
@@ -59,7 +61,7 @@ Unit tests: config loading, slug generation (Unicode, spaces, capitalization), f
 
 ## Milestone 2: Full Schema & Library API — `v0.2.0`
 
-**Summary**: All 16 tables exist in the database. All repository classes are available as a Python API. Data pipelines and future integrations can now import and use the repository layer. `datapm info` gives a formatted view of any project's full metadata.
+**Summary**: All 16 tables exist in the database. All repository classes are available as a Python API. Data pipelines and future integrations can now import and use the repository layer. `datapm info` gives a formatted view of any project's full metadata. Folder selection is redesigned with archetypes and interactive toggles.
 
 ### Acceptance Criteria
 
@@ -73,21 +75,31 @@ Unit tests: config loading, slug generation (Unicode, spaces, capitalization), f
 - [ ] Seed data for common EntityType and AggregationLevel values
 - [ ] All repository classes have full test coverage
 - [ ] API usage is documented with examples
+- [ ] Folder selection redesigned: archetype picker + interactive toggles (see `docs/FOLDER-SELECTION-DESIGN.md`)
+- [ ] Git init moved to `src/` (OneDrive compatibility)
+- [ ] `archief/` removed from auto-created folders
+- [ ] Custom templates supported via config
+- [ ] Slug collision handled with user-friendly error (#14)
+- [ ] DB connections properly closed (#15)
+- [ ] Column whitelist in `ProjectRepository.update()` (#16)
+- [ ] Sphinx docstring warning fixed (#17)
 
 ### Testing Strategy
 
-Unit tests for every repository class: CRUD operations, M:N junction management, Person SCD2 versioning (new version on update, is_current flag, valid_from/valid_to), ChangeLog auto-logging. Integration test: simulate a data pipeline that creates a project, registers files, assigns people — all via Python API.
+Unit tests for every repository class: CRUD operations, M:N junction management, Person SCD2 versioning (new version on update, is_current flag, valid_from/valid_to), ChangeLog auto-logging. Integration test: simulate a data pipeline that creates a project, registers files, assigns people — all via Python API. Archetype/template tests: verify folder structures for each preset, toggle dependency logic, language switching.
 
 ### Pull Requests (in merge order)
 
 | # | Branch | Size | Description |
 |---|--------|------|-------------|
-| 1 | `feat/schema-complete` | L | Schema migration 2: all remaining 14 tables (Person with SCD2 fields, Tag, DataFile, Query, Deliverable, RequestQuestion, ChangeLog, EntityType, AggregationLevel, all junction tables). Seed data for lookups. |
-| 2 | `feat/repositories-people-tags` | M | `db/repositories/person.py` (Person with SCD2 versioning + ProjectPerson), `db/repositories/tag.py` (Tag + ProjectTag). Full CRUD. Person.create_new_version() sets valid_to on old record, creates new with valid_from. |
-| 3 | `feat/repositories-data` | M | `db/repositories/data_file.py` (DataFile + EntityType + AggregationLevel + junctions), `db/repositories/query.py`, `db/repositories/deliverable.py` (+ DeliverableDataFile), `db/repositories/question.py`. |
-| 4 | `feat/changelog` | S | `db/repositories/changelog.py`: ChangeLog recording. Hook into repository update methods. |
-| 5 | `feat/project-update-info` | S | Argparse: `project update` (status, domain, tags, external_url) and `info <slug>` (formatted metadata view). Validates inputs. |
-| 6 | `docs/api-usage` | M | Sphinx autodoc for all repository classes. Usage examples: how a data pipeline imports and writes to the DB. |
+| 1 | `fix/v01-cleanup` | S | Fix slug collision (#14), connection lifecycle (#15), column whitelist (#16), Sphinx warning (#17). |
+| 2 | `feat/folder-selection` | L | `core/templates.py`: archetype definitions, folder/subfolder mappings, language support. Update `core/project.py`, `config/defaults.py`, `config/loader.py`, both CLI implementations. Design: `docs/FOLDER-SELECTION-DESIGN.md`. (#19) |
+| 3 | `feat/schema-complete` | L | Schema migration 2: all remaining 14 tables (Person with SCD2 fields, Tag, DataFile, Query, Deliverable, RequestQuestion, ChangeLog, EntityType, AggregationLevel, all junction tables). Seed data for lookups. |
+| 4 | `feat/repositories-people-tags` | M | `db/repositories/person.py` (Person with SCD2 versioning + ProjectPerson), `db/repositories/tag.py` (Tag + ProjectTag). Full CRUD. Person.create_new_version() sets valid_to on old record, creates new with valid_from. |
+| 5 | `feat/repositories-data` | M | `db/repositories/data_file.py` (DataFile + EntityType + AggregationLevel + junctions), `db/repositories/query.py`, `db/repositories/deliverable.py` (+ DeliverableDataFile), `db/repositories/question.py`. |
+| 6 | `feat/changelog` | S | `db/repositories/changelog.py`: ChangeLog recording. Hook into repository update methods. |
+| 7 | `feat/project-update-info` | S | Argparse: `project update` (status, domain, tags, external_url) and `info <slug>` (formatted metadata view). Validates inputs. |
+| 8 | `docs/api-usage` | M | Sphinx autodoc for all repository classes. Usage examples: how a data pipeline imports and writes to the DB. |
 
 ---
 
@@ -154,11 +166,11 @@ Coverage sweep, edge cases (Unicode slugs, long paths, empty DB), cross-platform
 
 | Milestone | Tag | PRs | Focus |
 |-----------|-----|-----|-------|
-| Launcher | v0.1.0 | 6 | `datapm new`, config, DB foundation |
-| Full Schema & Library API | v0.2.0 | 6 | All 16 tables, repository classes (SCD2 Person), Python API, `datapm info` |
+| Launcher | v0.1.0 | 6 ✅ | `datapm new`, config, DB foundation |
+| Full Schema & Library API | v0.2.0 | 8 | All 16 tables, repository classes, folder selection redesign, v0.1.0 fixes |
 | Search & Export | v0.3.0 | 4 | FTS5 search, JSON export, AI readiness |
 | Docs & v1 Release | v1.0.0 | 4 | Documentation, coverage, stability |
-| **Total** | | **20** | |
+| **Total** | | **22** | |
 
 ## Post v1.0.0 — Build When Needed
 
