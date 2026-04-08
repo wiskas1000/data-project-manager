@@ -282,71 +282,73 @@ def create_project(
     # -- Resolve root --------------------------------------------------------
     effective_db_path = db_path or get_db_path(config_path)
     conn = get_connection(effective_db_path)
-    root_repo = ProjectRootRepository(conn)
-    proj_repo = ProjectRepository(conn)
+    try:
+        root_repo = ProjectRootRepository(conn)
+        proj_repo = ProjectRepository(conn)
 
-    root_id: str | None = None
-    project_root_path: Path | None = root_path_override
+        root_id: str | None = None
+        project_root_path: Path | None = root_path_override
 
-    if project_root_path is None:
-        resolved_root_name = root_name or get_default_root(config_path)
-        if resolved_root_name:
-            root_record = root_repo.get_by_name(resolved_root_name)
-            if root_record is None:
-                cfg_root_path = get_root_path(resolved_root_name, config_path)
-                if cfg_root_path:
-                    config = load_config(config_path)
-                    is_def = resolved_root_name == config.get("general", {}).get(
-                        "default_root"
-                    )
-                    root_record = root_repo.create(
-                        name=resolved_root_name,
-                        absolute_path=str(cfg_root_path),
-                        is_default=is_def,
-                    )
-            if root_record:
-                root_id = root_record["id"]
-                project_root_path = Path(root_record["absolute_path"])
+        if project_root_path is None:
+            resolved_root_name = root_name or get_default_root(config_path)
+            if resolved_root_name:
+                root_record = root_repo.get_by_name(resolved_root_name)
+                if root_record is None:
+                    cfg_root_path = get_root_path(resolved_root_name, config_path)
+                    if cfg_root_path:
+                        config = load_config(config_path)
+                        is_def = resolved_root_name == config.get("general", {}).get(
+                            "default_root"
+                        )
+                        root_record = root_repo.create(
+                            name=resolved_root_name,
+                            absolute_path=str(cfg_root_path),
+                            is_default=is_def,
+                        )
+                if root_record:
+                    root_id = root_record["id"]
+                    project_root_path = Path(root_record["absolute_path"])
 
-    project_path = (
-        (project_root_path / folder_name)
-        if project_root_path
-        else (Path.cwd() / folder_name)
-    )
+        project_path = (
+            (project_root_path / folder_name)
+            if project_root_path
+            else (Path.cwd() / folder_name)
+        )
 
-    if project_path.exists():
-        raise FileExistsError(f"Project folder already exists: {project_path}")
+        if project_path.exists():
+            raise FileExistsError(f"Project folder already exists: {project_path}")
 
-    # -- DB record -----------------------------------------------------------
-    project = proj_repo.create(
-        title=title,
-        slug=slug,
-        description=description,
-        is_adhoc=is_adhoc,
-        domain=domain,
-        root_id=root_id,
-        relative_path=folder_name,
-        has_git_repo=do_git_init,
-        template_used=template_used,
-        request_date=request_date,
-        expected_start=expected_start,
-        expected_end=expected_end,
-        estimated_hours=estimated_hours,
-    )
+        # -- DB record -------------------------------------------------------
+        project = proj_repo.create(
+            title=title,
+            slug=slug,
+            description=description,
+            is_adhoc=is_adhoc,
+            domain=domain,
+            root_id=root_id,
+            relative_path=folder_name,
+            has_git_repo=do_git_init,
+            template_used=template_used,
+            request_date=request_date,
+            expected_start=expected_start,
+            expected_end=expected_end,
+            estimated_hours=estimated_hours,
+        )
 
-    # -- Scaffold ------------------------------------------------------------
-    scaffold_folders(project_path, optional_folders)
+        # -- Scaffold --------------------------------------------------------
+        scaffold_folders(project_path, optional_folders)
 
-    if do_git_init:
-        did_init = git_init_project(project_path)
-        if not did_init:
-            # Update DB record to reflect git didn't actually run.
-            proj_repo.update(project["id"], has_git_repo=False)
-            project = proj_repo.get(project["id"])  # type: ignore[assignment]
+        if do_git_init:
+            did_init = git_init_project(project_path)
+            if not did_init:
+                proj_repo.update(project["id"], has_git_repo=False)
+                project = proj_repo.get(project["id"])  # type: ignore[assignment]
 
-    export_project_json(project, project_path)
+        export_project_json(project, project_path)
 
-    return {**project, "project_path": str(project_path)}
+        return {**project, "project_path": str(project_path)}
+    finally:
+        conn.close()
 
 
 def list_projects(
@@ -373,4 +375,7 @@ def list_projects(
 
     effective_db_path = db_path or get_db_path(config_path)
     conn = get_connection(effective_db_path)
-    return ProjectRepository(conn).list(status=status, domain=domain)
+    try:
+        return ProjectRepository(conn).list(status=status, domain=domain)
+    finally:
+        conn.close()

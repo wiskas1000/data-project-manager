@@ -6,10 +6,10 @@ Every schema change gets a new migration number.  On startup
 
 Migration history
 -----------------
-1   Project and ProjectRoot tables (v0.1.0)
-2   Remaining 14 tables — Person, Tag, DataFile, Query, Deliverable,
-    RequestQuestion, ChangeLog, EntityType, AggregationLevel, and all
-    junction tables (v0.2.0)
+- **1** — Project and ProjectRoot tables (v0.1.0)
+- **2** — Remaining 14 tables: Person, Tag, DataFile, Query, Deliverable,
+  RequestQuestion, ChangeLog, EntityType, AggregationLevel, and all
+  junction tables (v0.2.0)
 """
 
 import sqlite3
