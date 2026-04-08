@@ -11,12 +11,17 @@ Example::
     new_version = repo.create_new_version(person["id"], department="Data Science")
 """
 
+from __future__ import annotations
+
 import sqlite3
 import uuid
 from datetime import date
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from data_project_manager.db.repositories._helpers import now_iso, row_to_dict
+
+if TYPE_CHECKING:
+    from data_project_manager.db.repositories.changelog import ChangeLogRepository
 
 
 def _today() -> str:
@@ -35,10 +40,21 @@ class PersonRepository:
     Args:
         conn: Open SQLite connection returned by
             :func:`~data_project_manager.db.connection.get_connection`.
+        changelog: Optional :class:`ChangeLogRepository` to receive
+            field-level change entries when :meth:`create_new_version`
+            is called.
     """
 
-    def __init__(self, conn: sqlite3.Connection) -> None:
+    #: SCD2 fields tracked in the changelog.
+    _SCD_FIELDS = ("first_name", "last_name", "email", "function_title", "department")
+
+    def __init__(
+        self,
+        conn: sqlite3.Connection,
+        changelog: ChangeLogRepository | None = None,
+    ) -> None:
         self._conn = conn
+        self._changelog = changelog
 
     def create(
         self,
@@ -176,6 +192,14 @@ class PersonRepository:
         new_title = fields.get("function_title", current["function_title"])
         new_dept = fields.get("department", current["department"])
 
+        new_values = {
+            "first_name": new_first,
+            "last_name": new_last,
+            "email": new_email,
+            "function_title": new_title,
+            "department": new_dept,
+        }
+
         with self._conn:
             # Close current version
             self._conn.execute(
@@ -192,6 +216,28 @@ class PersonRepository:
                 """,
                 (new_id, new_first, new_last, new_email, new_title, new_dept, vf, now),
             )
+            # Log each field that actually changed against the new version's id
+            if self._changelog is not None:
+                for field in self._SCD_FIELDS:
+                    old_val = current[field]
+                    new_val = new_values[field]
+                    if str(old_val) != str(new_val):
+                        self._conn.execute(
+                            """
+                            INSERT INTO change_log
+                                (id, entity_type, entity_id, field_name,
+                                 old_value, new_value, changed_at)
+                            VALUES (?, 'person', ?, ?, ?, ?, ?)
+                            """,
+                            (
+                                str(uuid.uuid4()),
+                                new_id,
+                                field,
+                                None if old_val is None else str(old_val),
+                                None if new_val is None else str(new_val),
+                                now,
+                            ),
+                        )
         return self.get(new_id)  # type: ignore[return-value]
 
 

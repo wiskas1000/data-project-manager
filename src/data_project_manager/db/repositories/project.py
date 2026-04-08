@@ -11,11 +11,16 @@ Example::
     projects = repo.list()
 """
 
+from __future__ import annotations
+
 import sqlite3
 import uuid
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from data_project_manager.db.repositories._helpers import now_iso, row_to_dict
+
+if TYPE_CHECKING:
+    from data_project_manager.db.repositories.changelog import ChangeLogRepository
 
 
 class ProjectRootRepository:
@@ -150,8 +155,13 @@ class ProjectRepository:
         "template_used",
     }
 
-    def __init__(self, conn: sqlite3.Connection) -> None:
+    def __init__(
+        self,
+        conn: sqlite3.Connection,
+        changelog: ChangeLogRepository | None = None,
+    ) -> None:
         self._conn = conn
+        self._changelog = changelog
 
     def create(
         self,
@@ -354,6 +364,10 @@ class ProjectRepository:
                 f"Must be one of {self.VALID_STATUSES}."
             )
 
+        # Snapshot before-values for changelog (only when changelog is wired up)
+        before = self.get(project_id) if self._changelog is not None else None
+
+        user_fields = dict(fields)  # preserve before adding updated_at
         fields["updated_at"] = now_iso()
         set_clause = ", ".join(f"{k} = ?" for k in fields)
         values = list(fields.values()) + [project_id]
@@ -362,4 +376,24 @@ class ProjectRepository:
                 f"UPDATE project SET {set_clause} WHERE id = ?",  # noqa: S608
                 values,
             )
+            if before is not None and self._changelog is not None:
+                for key, new_val in user_fields.items():
+                    old_val = before.get(key)
+                    if str(old_val) != str(new_val):
+                        self._conn.execute(
+                            """
+                            INSERT INTO change_log
+                                (id, entity_type, entity_id, field_name,
+                                 old_value, new_value, changed_at)
+                            VALUES (?, 'project', ?, ?, ?, ?, ?)
+                            """,
+                            (
+                                str(uuid.uuid4()),
+                                project_id,
+                                key,
+                                None if old_val is None else str(old_val),
+                                None if new_val is None else str(new_val),
+                                now_iso(),
+                            ),
+                        )
         return self.get(project_id)
