@@ -14,10 +14,7 @@ import sqlite3
 import uuid
 from typing import Any
 
-
-def _row_to_dict(row: sqlite3.Row | None) -> dict[str, Any] | None:
-    """Convert a :class:`sqlite3.Row` to a plain dict, or return ``None``."""
-    return dict(row) if row is not None else None
+from data_project_manager.db.repositories._helpers import row_to_dict
 
 
 class TagRepository:
@@ -75,7 +72,7 @@ class TagRepository:
             Tag dict, or ``None`` if not found.
         """
         row = self._conn.execute("SELECT * FROM tag WHERE id = ?", (tag_id,)).fetchone()
-        return _row_to_dict(row)
+        return row_to_dict(row)
 
     def get_by_name(self, name: str) -> dict[str, Any] | None:
         """Fetch a tag by its normalised name.
@@ -89,7 +86,7 @@ class TagRepository:
         row = self._conn.execute(
             "SELECT * FROM tag WHERE name = ?", (name.strip().lower(),)
         ).fetchone()
-        return _row_to_dict(row)
+        return row_to_dict(row)
 
     def list(self, *, category: str | None = None) -> list[dict[str, Any]]:
         """Return all tags, optionally filtered by category.
