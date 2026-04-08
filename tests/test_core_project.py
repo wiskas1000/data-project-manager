@@ -26,7 +26,7 @@ from data_project_manager.core.templates import (
 from data_project_manager.db.schema import migrate
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Helpers / fixtures
 # ---------------------------------------------------------------------------
 
 
@@ -41,6 +41,12 @@ def _db(tmp_path: Path) -> Path:
     migrate(conn)
     conn.close()
     return db
+
+
+@pytest.fixture()
+def project_env(tmp_path: Path) -> tuple[Path, Path]:
+    """Return ``(db_path, root_path)`` for integration tests."""
+    return _db(tmp_path), tmp_path / "projects"
 
 
 # ---------------------------------------------------------------------------
@@ -234,7 +240,7 @@ def test_resolve_folders_deduplicated() -> None:
 
 def test_get_archetype_valid() -> None:
     arch = get_archetype("modeling")
-    assert arch.key == "modeling"
+    assert arch.label == "Modeling"
     assert "literatuur" in arch.folders
 
 
@@ -307,51 +313,36 @@ def test_git_init_returns_false_if_src_missing(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_create_project_basic(tmp_path: Path) -> None:
-    db = _db(tmp_path)
-    root = tmp_path / "projects"
-    result = create_project(
-        "Churn Analysis",
-        db_path=db,
-        root_path_override=root,
-    )
+def test_create_project_basic(project_env: tuple[Path, Path]) -> None:
+    db, root = project_env
+    result = create_project("Churn Analysis", db_path=db, root_path_override=root)
     assert result["title"] == "Churn Analysis"
     assert result["slug"].endswith("churn-analysis")
     assert result["status"] == "active"
     project_path = Path(result["project_path"])
     assert project_path.is_dir()
-    # Base folders
     assert (project_path / "communicatie").is_dir()
     assert (project_path / "documenten").is_dir()
-    # No archief
     assert not (project_path / "archief").exists()
     assert (project_path / "project.json").is_file()
 
 
-def test_create_project_default_template_is_analysis(tmp_path: Path) -> None:
-    db = _db(tmp_path)
-    root = tmp_path / "projects"
-    result = create_project(
-        "Default Template",
-        db_path=db,
-        root_path_override=root,
-    )
+def test_create_project_default_template_is_analysis(
+    project_env: tuple[Path, Path],
+) -> None:
+    db, root = project_env
+    result = create_project("Default Template", db_path=db, root_path_override=root)
     assert result["template_used"] == "analysis"
     project_path = Path(result["project_path"])
-    # Analysis includes data, src, notebooks, resultaten
     assert (project_path / "data" / "raw").is_dir()
     assert (project_path / "src" / "notebooks").is_dir()
     assert (project_path / "resultaten" / "export").is_dir()
 
 
-def test_create_project_minimal_template(tmp_path: Path) -> None:
-    db = _db(tmp_path)
-    root = tmp_path / "projects"
+def test_create_project_minimal_template(project_env: tuple[Path, Path]) -> None:
+    db, root = project_env
     result = create_project(
-        "Minimal Project",
-        template_used="minimal",
-        db_path=db,
-        root_path_override=root,
+        "Minimal Project", template_used="minimal", db_path=db, root_path_override=root
     )
     project_path = Path(result["project_path"])
     assert (project_path / "communicatie").is_dir()
@@ -359,9 +350,10 @@ def test_create_project_minimal_template(tmp_path: Path) -> None:
     assert not (project_path / "src").exists()
 
 
-def test_create_project_with_explicit_folders(tmp_path: Path) -> None:
-    db = _db(tmp_path)
-    root = tmp_path / "projects"
+def test_create_project_with_explicit_folders(
+    project_env: tuple[Path, Path],
+) -> None:
+    db, root = project_env
     result = create_project(
         "Custom Folders",
         optional_folders=["data", "notebooks"],
@@ -370,36 +362,32 @@ def test_create_project_with_explicit_folders(tmp_path: Path) -> None:
     )
     project_path = Path(result["project_path"])
     assert (project_path / "data" / "raw").is_dir()
-    # notebooks implies src
     assert (project_path / "src" / "notebooks").is_dir()
 
 
-def test_create_project_with_domain(tmp_path: Path) -> None:
-    db = _db(tmp_path)
+def test_create_project_with_domain(project_env: tuple[Path, Path]) -> None:
+    db, root = project_env
     result = create_project(
-        "Healthcare Study",
-        domain="healthcare",
-        db_path=db,
-        root_path_override=tmp_path / "r",
+        "Healthcare Study", domain="healthcare", db_path=db, root_path_override=root
     )
     assert result["domain"] == "healthcare"
 
 
-def test_create_project_raises_if_folder_exists(tmp_path: Path) -> None:
-    db = _db(tmp_path)
-    root = tmp_path / "projects"
+def test_create_project_raises_if_folder_exists(
+    project_env: tuple[Path, Path],
+) -> None:
+    db, root = project_env
     create_project("Duplicate", db_path=db, root_path_override=root)
     with pytest.raises(FileExistsError):
         create_project("Duplicate", db_path=db, root_path_override=root)
 
 
-def test_create_project_project_json_content(tmp_path: Path) -> None:
-    db = _db(tmp_path)
+def test_create_project_project_json_content(
+    project_env: tuple[Path, Path],
+) -> None:
+    db, root = project_env
     result = create_project(
-        "JSON Test",
-        domain="finance",
-        db_path=db,
-        root_path_override=tmp_path / "r",
+        "JSON Test", domain="finance", db_path=db, root_path_override=root
     )
     json_path = Path(result["project_path"]) / "project.json"
     data = json.loads(json_path.read_text(encoding="utf-8"))
@@ -407,48 +395,47 @@ def test_create_project_project_json_content(tmp_path: Path) -> None:
     assert "project_path" not in data
 
 
-def test_create_project_git_init_in_src(tmp_path: Path) -> None:
-    db = _db(tmp_path)
+def test_create_project_git_init_in_src(project_env: tuple[Path, Path]) -> None:
+    db, root = project_env
     result = create_project(
         "Git Project",
         do_git_init=True,
         optional_folders=["src"],
         db_path=db,
-        root_path_override=tmp_path / "r",
+        root_path_override=root,
     )
     project_path = Path(result["project_path"])
     src_dir = project_path / "src"
     assert src_dir.is_dir()
-    # Git should be in src/ (if git is available)
     if result["has_git_repo"]:
         assert (src_dir / ".git").is_dir()
         assert (src_dir / ".gitignore").is_file()
-        # .git should NOT be at project root
         assert not (project_path / ".git").exists()
 
 
-def test_create_project_git_no_src_sets_false(tmp_path: Path) -> None:
+def test_create_project_git_no_src_sets_false(
+    project_env: tuple[Path, Path],
+) -> None:
     """Git init without src/ selected should set has_git_repo=False."""
-    db = _db(tmp_path)
+    db, root = project_env
     result = create_project(
         "No Src Git",
         do_git_init=True,
         template_used="minimal",
         db_path=db,
-        root_path_override=tmp_path / "r",
+        root_path_override=root,
     )
-    # Minimal has no src/, so git can't initialise
     assert result["has_git_repo"] == 0
 
 
-def test_create_project_english_folders(tmp_path: Path) -> None:
-    db = _db(tmp_path)
+def test_create_project_english_folders(project_env: tuple[Path, Path]) -> None:
+    db, root = project_env
     result = create_project(
         "English Project",
         optional_folders=["data", "literatuur", "resultaten"],
         language="en",
         db_path=db,
-        root_path_override=tmp_path / "r",
+        root_path_override=root,
     )
     project_path = Path(result["project_path"])
     assert (project_path / "communication").is_dir()
@@ -462,24 +449,22 @@ def test_create_project_english_folders(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_list_projects_empty(tmp_path: Path) -> None:
-    db = _db(tmp_path)
+def test_list_projects_empty(project_env: tuple[Path, Path]) -> None:
+    db, _root = project_env
     assert list_projects(db_path=db) == []
 
 
-def test_list_projects_returns_created(tmp_path: Path) -> None:
-    db = _db(tmp_path)
-    create_project("A", db_path=db, root_path_override=tmp_path / "r")
-    create_project("B", domain="finance", db_path=db, root_path_override=tmp_path / "r")
-    projects = list_projects(db_path=db)
-    assert len(projects) == 2
+def test_list_projects_returns_created(project_env: tuple[Path, Path]) -> None:
+    db, root = project_env
+    create_project("A", db_path=db, root_path_override=root)
+    create_project("B", domain="finance", db_path=db, root_path_override=root)
+    assert len(list_projects(db_path=db)) == 2
 
 
-def test_list_projects_filter_domain(tmp_path: Path) -> None:
-    db = _db(tmp_path)
-    r = tmp_path / "r"
-    create_project("A", domain="healthcare", db_path=db, root_path_override=r)
-    create_project("B", domain="finance", db_path=db, root_path_override=r)
+def test_list_projects_filter_domain(project_env: tuple[Path, Path]) -> None:
+    db, root = project_env
+    create_project("A", domain="healthcare", db_path=db, root_path_override=root)
+    create_project("B", domain="finance", db_path=db, root_path_override=root)
     results = list_projects(domain="healthcare", db_path=db)
     assert len(results) == 1
     assert results[0]["domain"] == "healthcare"
