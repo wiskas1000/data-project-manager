@@ -62,7 +62,7 @@ dependencies = []
 enhanced = ["typer"]
 
 [project.scripts]
-datapm = "data_project_manager.cli.app:app"
+datapm = "data_project_manager.cli:main"
 
 [tool.ruff]
 line-length = 88

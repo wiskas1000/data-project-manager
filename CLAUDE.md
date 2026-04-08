@@ -36,7 +36,7 @@ A project launcher and metadata database for analytical work. The primary interf
 
 **Core mode**: Python 3.11+ stdlib only — zero external dependencies.
 
-**Enhanced mode** (optional): `typer[all]` for interactive prompts and Rich formatting.
+**Enhanced mode** (optional): `typer` for interactive prompts and Rich formatting.
 
 ## Running the Tool
 
@@ -119,13 +119,13 @@ data-project-manager/
 ```python
 #!/usr/bin/env python3
 # src/data_project_manager/__main__.py
-try:
-    from data_project_manager.cli.app import app
-    app()
-except ImportError:
-    from data_project_manager.cli.fallback import main
-    main()
+from data_project_manager.cli import main
+
+main()
 ```
+
+The `cli/__init__.py:main()` probes for Typer at import time and routes
+to `cli/app.py` or `cli/fallback.py` accordingly.
 
 Build argparse first (works everywhere). Add Typer wrapper after. `core/` and `db/` must NEVER import optional dependencies.
 
