@@ -10,7 +10,7 @@ Typical usage::
     result = create_project(
         title="Churn analysis",
         domain="marketing",
-        optional_folders=["data", "notebooks"],
+        archetype="analysis",
         do_git_init=True,
     )
     print(result["slug"])        # 2026-04-07-churn-analysis
@@ -25,25 +25,14 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
-
-#: Subfolders created in every new project.
-STANDARD_FOLDERS: list[str] = ["archief", "communicatie", "documenten"]
-
-#: Optional folder groups and the subfolders they create.
-OPTIONAL_FOLDER_MAP: dict[str, list[str]] = {
-    "data": ["data/raw", "data/processed", "data/metadata"],
-    "src": ["src/queries"],
-    "literatuur": ["literatuur"],
-    "resultaten": ["resultaten/export", "resultaten/figuren"],
-    "notebooks": ["notebooks"],
-}
-
-#: Valid keys for *optional_folders* argument.
-OPTIONAL_FOLDER_KEYS: list[str] = list(OPTIONAL_FOLDER_MAP)
-
+from data_project_manager.core.templates import (
+    BASE_FOLDERS,
+    SRC_TOGGLES,
+    SUBFOLDERS,
+    folder_display_name,
+    resolve_folders,
+    subfolder_display_name,
+)
 
 # ---------------------------------------------------------------------------
 # Slug & folder-name helpers
@@ -128,22 +117,43 @@ def make_folder_name(title: str, today: date | None = None) -> str:
 def scaffold_folders(
     project_path: Path,
     optional_folders: list[str] | None = None,
+    *,
+    language: str = "nl",
 ) -> None:
-    """Create the standard folder structure inside *project_path*.
+    """Create the folder structure inside *project_path*.
 
-    Always creates ``archief/``, ``communicatie/``, and ``documenten/``.
+    Always creates the base folders (``communicatie/``, ``documenten/``).
     Additional subtrees are created for each key in *optional_folders*.
+    ``notebooks`` and ``queries`` are placed under ``src/``.
 
     Args:
         project_path: Root of the new project (created if absent).
-        optional_folders: Subset of :data:`OPTIONAL_FOLDER_KEYS` to add.
+        optional_folders: Resolved folder keys (output of
+            :func:`~data_project_manager.core.templates.resolve_folders`).
+        language: ``"nl"`` or ``"en"`` — controls on-disk folder names.
     """
     project_path.mkdir(parents=True, exist_ok=True)
-    for folder in STANDARD_FOLDERS:
-        (project_path / folder).mkdir(exist_ok=True)
+
+    # Base folders (always)
+    for key in BASE_FOLDERS:
+        (project_path / folder_display_name(key, language)).mkdir(exist_ok=True)
+
     for key in optional_folders or []:
-        for subfolder in OPTIONAL_FOLDER_MAP.get(key, []):
-            (project_path / subfolder).mkdir(parents=True, exist_ok=True)
+        # src/ children (notebooks, queries) go under src/
+        if key in SRC_TOGGLES:
+            src_name = folder_display_name("src", language)
+            child_name = subfolder_display_name(key, language)
+            (project_path / src_name / child_name).mkdir(parents=True, exist_ok=True)
+            continue
+
+        # Top-level optional folder
+        folder_name = folder_display_name(key, language)
+        (project_path / folder_name).mkdir(exist_ok=True)
+
+        # Auto-created children (data/raw, data/processed, etc.)
+        for child_key in SUBFOLDERS.get(key, []):
+            child_name = subfolder_display_name(child_key, language)
+            (project_path / folder_name / child_name).mkdir(exist_ok=True)
 
 
 def export_project_json(project: dict[str, Any], project_path: Path) -> Path:
@@ -171,20 +181,27 @@ def export_project_json(project: dict[str, Any], project_path: Path) -> Path:
     return json_path
 
 
-def git_init_project(project_path: Path) -> bool:
-    """Run ``git init`` in *project_path* and write a minimal ``.gitignore``.
+def git_init_project(src_path: Path) -> bool:
+    """Run ``git init`` inside the ``src/`` directory.
+
+    Git lives in ``src/`` rather than the project root so that
+    OneDrive-synced project folders don't conflict with ``.git/``
+    internals.  See ``docs/FOLDER-SELECTION-DESIGN.md`` Section 6.
 
     Args:
-        project_path: Directory to initialise.
+        src_path: The ``src/`` directory to initialise.
 
     Returns:
-        ``True`` if ``git init`` succeeded, ``False`` if git is unavailable
-        or returned a non-zero exit code.
+        ``True`` if ``git init`` succeeded, ``False`` if git is
+        unavailable, *src_path* does not exist, or the command failed.
     """
+    if not src_path.is_dir():
+        return False
+
     try:
         result = subprocess.run(
             ["git", "init"],
-            cwd=project_path,
+            cwd=src_path,
             capture_output=True,
             text=True,
         )
@@ -194,9 +211,12 @@ def git_init_project(project_path: Path) -> bool:
     if result.returncode != 0:
         return False
 
-    gitignore = project_path / ".gitignore"
+    gitignore = src_path / ".gitignore"
     gitignore.write_text(
-        "# Data Project Manager\n*.db\n.DS_Store\n__pycache__/\n",
+        "# datapm default — add language-specific patterns as needed\n"
+        "__pycache__/\n"
+        "*.pyc\n"
+        ".ipynb_checkpoints/\n",
         encoding="utf-8",
     )
     return True
@@ -221,7 +241,8 @@ def create_project(
     expected_start: str | None = None,
     expected_end: str | None = None,
     estimated_hours: float | None = None,
-    template_used: str = "minimal",
+    template_used: str = "analysis",
+    language: str = "nl",
     db_path: str | Path | None = None,
     config_path: Path | None = None,
 ) -> dict[str, Any]:
@@ -233,8 +254,8 @@ def create_project(
     2. ProjectRoot resolution (config → DB; created in DB if absent).
     3. DB record insertion via
        :class:`~data_project_manager.db.repositories.project.ProjectRepository`.
-    4. Folder scaffolding.
-    5. Optional ``git init``.
+    4. Folder scaffolding (base + optional, language-aware).
+    5. Optional ``git init`` in ``src/``.
     6. ``project.json`` export.
 
     Args:
@@ -242,8 +263,9 @@ def create_project(
         domain: Subject area (e.g. ``"healthcare"``).
         description: Free-text description.
         is_adhoc: ``True`` for quick ad-hoc requests.
-        optional_folders: Subset of :data:`OPTIONAL_FOLDER_KEYS`.
-        do_git_init: Run ``git init`` in the project folder.
+        optional_folders: Resolved folder keys.  When ``None``, the
+            archetype indicated by *template_used* provides defaults.
+        do_git_init: Run ``git init`` in the ``src/`` directory.
         root_name: Named root from config; defaults to the config default.
         root_path_override: Explicit root path (skips config lookup).
             Useful in tests.
@@ -251,7 +273,8 @@ def create_project(
         expected_start: ISO date for planned start.
         expected_end: ISO date for planned end.
         estimated_hours: Effort estimate in hours.
-        template_used: Scaffold template name.
+        template_used: Archetype key (e.g. ``"analysis"``).
+        language: ``"nl"`` or ``"en"`` for on-disk folder names.
         db_path: Explicit database path (skips config lookup).  Useful in
             tests.
         config_path: Explicit config path (skips default).  Useful in tests.
@@ -274,6 +297,15 @@ def create_project(
         ProjectRepository,
         ProjectRootRepository,
     )
+
+    # If no explicit folders, use archetype defaults
+    if optional_folders is None:
+        from data_project_manager.core.templates import get_archetype
+
+        archetype = get_archetype(template_used)
+        optional_folders = resolve_folders(archetype.folders)
+    else:
+        optional_folders = resolve_folders(optional_folders)
 
     today = date.today()
     slug = generate_slug(title, today)
@@ -336,10 +368,12 @@ def create_project(
         )
 
         # -- Scaffold --------------------------------------------------------
-        scaffold_folders(project_path, optional_folders)
+        scaffold_folders(project_path, optional_folders, language=language)
 
         if do_git_init:
-            did_init = git_init_project(project_path)
+            src_name = folder_display_name("src", language)
+            src_dir = project_path / src_name
+            did_init = git_init_project(src_dir)
             if not did_init:
                 proj_repo.update(project["id"], has_git_repo=False)
                 project = proj_repo.get(project["id"])  # type: ignore[assignment]

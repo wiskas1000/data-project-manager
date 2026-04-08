@@ -1,4 +1,4 @@
-"""Tests for core/project.py."""
+"""Tests for core/project.py and core/templates.py."""
 
 import json
 from datetime import date
@@ -7,15 +7,21 @@ from pathlib import Path
 import pytest
 
 from data_project_manager.core.project import (
-    OPTIONAL_FOLDER_KEYS,
-    STANDARD_FOLDERS,
     create_project,
     export_project_json,
     generate_slug,
+    git_init_project,
     list_projects,
     make_folder_name,
     scaffold_folders,
     slugify,
+)
+from data_project_manager.core.templates import (
+    BASE_FOLDERS,
+    BUILT_IN_ARCHETYPES,
+    OPTIONAL_FOLDERS,
+    get_archetype,
+    resolve_folders,
 )
 from data_project_manager.db.schema import migrate
 
@@ -97,15 +103,21 @@ def test_make_folder_name_preserves_case() -> None:
 
 
 # ---------------------------------------------------------------------------
-# scaffold_folders
+# scaffold_folders (new template system)
 # ---------------------------------------------------------------------------
 
 
-def test_scaffold_creates_standard_folders(tmp_path: Path) -> None:
+def test_scaffold_creates_base_folders(tmp_path: Path) -> None:
     project_path = tmp_path / "myproject"
     scaffold_folders(project_path)
-    for folder in STANDARD_FOLDERS:
-        assert (project_path / folder).is_dir(), f"{folder} missing"
+    for key in BASE_FOLDERS:
+        assert (project_path / key).is_dir(), f"{key} missing"
+
+
+def test_scaffold_no_archief_by_default(tmp_path: Path) -> None:
+    project_path = tmp_path / "myproject"
+    scaffold_folders(project_path)
+    assert not (project_path / "archief").exists()
 
 
 def test_scaffold_optional_data(tmp_path: Path) -> None:
@@ -123,18 +135,126 @@ def test_scaffold_optional_resultaten(tmp_path: Path) -> None:
     assert (project_path / "resultaten" / "figuren").is_dir()
 
 
-def test_scaffold_all_optional(tmp_path: Path) -> None:
+def test_scaffold_notebooks_under_src(tmp_path: Path) -> None:
     project_path = tmp_path / "p"
-    scaffold_folders(project_path, optional_folders=OPTIONAL_FOLDER_KEYS)
-    assert (project_path / "notebooks").is_dir()
+    scaffold_folders(project_path, optional_folders=["src", "notebooks"])
+    assert (project_path / "src" / "notebooks").is_dir()
+    # notebooks should NOT be at top level
+    assert not (project_path / "notebooks").exists()
+
+
+def test_scaffold_queries_under_src(tmp_path: Path) -> None:
+    project_path = tmp_path / "p"
+    scaffold_folders(project_path, optional_folders=["src", "queries"])
     assert (project_path / "src" / "queries").is_dir()
+
+
+def test_scaffold_src_alone(tmp_path: Path) -> None:
+    project_path = tmp_path / "p"
+    scaffold_folders(project_path, optional_folders=["src"])
+    assert (project_path / "src").is_dir()
+    # No children unless explicitly selected
+    assert not (project_path / "src" / "notebooks").exists()
+    assert not (project_path / "src" / "queries").exists()
+
+
+def test_scaffold_literatuur(tmp_path: Path) -> None:
+    project_path = tmp_path / "p"
+    scaffold_folders(project_path, optional_folders=["literatuur"])
     assert (project_path / "literatuur").is_dir()
 
 
-def test_scaffold_unknown_key_ignored(tmp_path: Path) -> None:
+def test_scaffold_english_language(tmp_path: Path) -> None:
     project_path = tmp_path / "p"
-    scaffold_folders(project_path, optional_folders=["nonexistent"])
-    assert project_path.is_dir()
+    scaffold_folders(
+        project_path,
+        optional_folders=["data", "src", "notebooks", "literatuur", "resultaten"],
+        language="en",
+    )
+    assert (project_path / "communication").is_dir()
+    assert (project_path / "documents").is_dir()
+    assert (project_path / "literature").is_dir()
+    assert (project_path / "results" / "export").is_dir()
+    assert (project_path / "results" / "figures").is_dir()
+    assert (project_path / "src" / "notebooks").is_dir()
+
+
+def test_scaffold_analysis_archetype_folders(tmp_path: Path) -> None:
+    """Verify the analysis archetype creates the expected structure."""
+    project_path = tmp_path / "p"
+    arch = get_archetype("analysis")
+    folders = resolve_folders(arch.folders)
+    scaffold_folders(project_path, optional_folders=folders)
+    assert (project_path / "communicatie").is_dir()
+    assert (project_path / "documenten").is_dir()
+    assert (project_path / "data" / "raw").is_dir()
+    assert (project_path / "src" / "notebooks").is_dir()
+    assert (project_path / "resultaten" / "export").is_dir()
+    assert not (project_path / "literatuur").exists()
+
+
+# ---------------------------------------------------------------------------
+# templates: resolve_folders
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_folders_notebooks_implies_src() -> None:
+    result = resolve_folders(["notebooks"])
+    assert "src" in result
+    assert "notebooks" in result
+
+
+def test_resolve_folders_queries_implies_src() -> None:
+    result = resolve_folders(["queries"])
+    assert "src" in result
+
+
+def test_resolve_folders_remove_src_clears_children() -> None:
+    result = resolve_folders(["data", "src", "notebooks"], remove=["src"])
+    assert "src" not in result
+    assert "notebooks" not in result
+    assert "data" in result
+
+
+def test_resolve_folders_add_and_remove() -> None:
+    result = resolve_folders(
+        ["data", "src", "notebooks"],
+        add=["literatuur"],
+        remove=["notebooks"],
+    )
+    assert "literatuur" in result
+    assert "notebooks" not in result
+    assert "src" in result  # still there, not removed
+
+
+def test_resolve_folders_deduplicated() -> None:
+    result = resolve_folders(["data", "data", "src"])
+    assert result.count("data") == 1
+
+
+def test_get_archetype_valid() -> None:
+    arch = get_archetype("modeling")
+    assert arch.key == "modeling"
+    assert "literatuur" in arch.folders
+
+
+def test_get_archetype_invalid() -> None:
+    with pytest.raises(ValueError, match="Unknown archetype"):
+        get_archetype("nonexistent")
+
+
+def test_all_archetypes_have_valid_folder_keys() -> None:
+    for key, arch in BUILT_IN_ARCHETYPES.items():
+        for f in arch.folders:
+            assert f in OPTIONAL_FOLDERS, f"{key} has invalid folder {f}"
+
+
+def test_minimal_archetype_has_no_folders() -> None:
+    assert get_archetype("minimal").folders == []
+
+
+def test_full_archetype_has_all_folders() -> None:
+    assert set(get_archetype("full").folders) == set(OPTIONAL_FOLDERS)
 
 
 # ---------------------------------------------------------------------------
@@ -163,6 +283,26 @@ def test_export_project_json_strips_project_path_key(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# git_init_project (now targets src/)
+# ---------------------------------------------------------------------------
+
+
+def test_git_init_project_in_src(tmp_path: Path) -> None:
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    result = git_init_project(src_dir)
+    if result:
+        assert (src_dir / ".git").is_dir()
+        assert (src_dir / ".gitignore").is_file()
+        content = (src_dir / ".gitignore").read_text()
+        assert "__pycache__/" in content
+
+
+def test_git_init_returns_false_if_src_missing(tmp_path: Path) -> None:
+    assert git_init_project(tmp_path / "nonexistent") is False
+
+
+# ---------------------------------------------------------------------------
 # create_project (integration)
 # ---------------------------------------------------------------------------
 
@@ -180,22 +320,58 @@ def test_create_project_basic(tmp_path: Path) -> None:
     assert result["status"] == "active"
     project_path = Path(result["project_path"])
     assert project_path.is_dir()
-    assert (project_path / "archief").is_dir()
+    # Base folders
+    assert (project_path / "communicatie").is_dir()
+    assert (project_path / "documenten").is_dir()
+    # No archief
+    assert not (project_path / "archief").exists()
     assert (project_path / "project.json").is_file()
 
 
-def test_create_project_with_optional_folders(tmp_path: Path) -> None:
+def test_create_project_default_template_is_analysis(tmp_path: Path) -> None:
     db = _db(tmp_path)
     root = tmp_path / "projects"
     result = create_project(
-        "Dataset Analysis",
+        "Default Template",
+        db_path=db,
+        root_path_override=root,
+    )
+    assert result["template_used"] == "analysis"
+    project_path = Path(result["project_path"])
+    # Analysis includes data, src, notebooks, resultaten
+    assert (project_path / "data" / "raw").is_dir()
+    assert (project_path / "src" / "notebooks").is_dir()
+    assert (project_path / "resultaten" / "export").is_dir()
+
+
+def test_create_project_minimal_template(tmp_path: Path) -> None:
+    db = _db(tmp_path)
+    root = tmp_path / "projects"
+    result = create_project(
+        "Minimal Project",
+        template_used="minimal",
+        db_path=db,
+        root_path_override=root,
+    )
+    project_path = Path(result["project_path"])
+    assert (project_path / "communicatie").is_dir()
+    assert not (project_path / "data").exists()
+    assert not (project_path / "src").exists()
+
+
+def test_create_project_with_explicit_folders(tmp_path: Path) -> None:
+    db = _db(tmp_path)
+    root = tmp_path / "projects"
+    result = create_project(
+        "Custom Folders",
         optional_folders=["data", "notebooks"],
         db_path=db,
         root_path_override=root,
     )
     project_path = Path(result["project_path"])
     assert (project_path / "data" / "raw").is_dir()
-    assert (project_path / "notebooks").is_dir()
+    # notebooks implies src
+    assert (project_path / "src" / "notebooks").is_dir()
 
 
 def test_create_project_with_domain(tmp_path: Path) -> None:
@@ -231,17 +407,54 @@ def test_create_project_project_json_content(tmp_path: Path) -> None:
     assert "project_path" not in data
 
 
-def test_create_project_git_init(tmp_path: Path) -> None:
+def test_create_project_git_init_in_src(tmp_path: Path) -> None:
     db = _db(tmp_path)
     result = create_project(
         "Git Project",
         do_git_init=True,
+        optional_folders=["src"],
         db_path=db,
         root_path_override=tmp_path / "r",
     )
     project_path = Path(result["project_path"])
-    # .git dir exists OR git is not installed (graceful degradation)
-    assert project_path.is_dir()
+    src_dir = project_path / "src"
+    assert src_dir.is_dir()
+    # Git should be in src/ (if git is available)
+    if result["has_git_repo"]:
+        assert (src_dir / ".git").is_dir()
+        assert (src_dir / ".gitignore").is_file()
+        # .git should NOT be at project root
+        assert not (project_path / ".git").exists()
+
+
+def test_create_project_git_no_src_sets_false(tmp_path: Path) -> None:
+    """Git init without src/ selected should set has_git_repo=False."""
+    db = _db(tmp_path)
+    result = create_project(
+        "No Src Git",
+        do_git_init=True,
+        template_used="minimal",
+        db_path=db,
+        root_path_override=tmp_path / "r",
+    )
+    # Minimal has no src/, so git can't initialise
+    assert result["has_git_repo"] == 0
+
+
+def test_create_project_english_folders(tmp_path: Path) -> None:
+    db = _db(tmp_path)
+    result = create_project(
+        "English Project",
+        optional_folders=["data", "literatuur", "resultaten"],
+        language="en",
+        db_path=db,
+        root_path_override=tmp_path / "r",
+    )
+    project_path = Path(result["project_path"])
+    assert (project_path / "communication").is_dir()
+    assert (project_path / "documents").is_dir()
+    assert (project_path / "literature").is_dir()
+    assert (project_path / "results" / "figures").is_dir()
 
 
 # ---------------------------------------------------------------------------

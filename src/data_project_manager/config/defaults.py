@@ -22,11 +22,12 @@ DEFAULT_CONFIG: dict = {
         },
     },
     "defaults": {
-        "template": "minimal",
+        "template": "analysis",
         "git_init": True,
         "sensitivity": "internal",
     },
     "preferences": {
         "folder_language": "nl",
     },
+    "templates": {},
 }
