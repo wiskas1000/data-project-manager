@@ -13,23 +13,15 @@ Example::
 
 import sqlite3
 import uuid
-from datetime import UTC, date, datetime
+from datetime import date
 from typing import Any
 
-
-def _now() -> str:
-    """Return the current UTC time as an ISO 8601 string."""
-    return datetime.now(UTC).isoformat()
+from data_project_manager.db.repositories._helpers import now_iso, row_to_dict
 
 
 def _today() -> str:
     """Return today's date as an ISO 8601 string."""
     return date.today().isoformat()
-
-
-def _row_to_dict(row: sqlite3.Row | None) -> dict[str, Any] | None:
-    """Convert a :class:`sqlite3.Row` to a plain dict, or return ``None``."""
-    return dict(row) if row is not None else None
 
 
 class PersonRepository:
@@ -73,7 +65,7 @@ class PersonRepository:
             The newly created person as a dict.
         """
         person_id = str(uuid.uuid4())
-        now = _now()
+        now = now_iso()
         vf = valid_from or _today()
         with self._conn:
             self._conn.execute(
@@ -108,7 +100,7 @@ class PersonRepository:
         row = self._conn.execute(
             "SELECT * FROM person WHERE id = ?", (person_id,)
         ).fetchone()
-        return _row_to_dict(row)
+        return row_to_dict(row)
 
     def get_current_by_email(self, email: str) -> dict[str, Any] | None:
         """Fetch the current version of a person by email.
@@ -123,7 +115,7 @@ class PersonRepository:
             "SELECT * FROM person WHERE email = ? AND is_current = 1",
             (email,),
         ).fetchone()
-        return _row_to_dict(row)
+        return row_to_dict(row)
 
     def list(self, *, current_only: bool = True) -> list[dict[str, Any]]:
         """Return persons, optionally only current versions.
@@ -174,7 +166,7 @@ class PersonRepository:
             raise ValueError(f"Person {person_id!r} is not the current version.")
 
         vf = valid_from or _today()
-        now = _now()
+        now = now_iso()
         new_id = str(uuid.uuid4())
 
         # Carry forward all fields, override with provided ones

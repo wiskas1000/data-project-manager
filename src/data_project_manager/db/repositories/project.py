@@ -13,18 +13,9 @@ Example::
 
 import sqlite3
 import uuid
-from datetime import UTC, datetime
 from typing import Any
 
-
-def _now() -> str:
-    """Return the current UTC time as an ISO 8601 string."""
-    return datetime.now(UTC).isoformat()
-
-
-def _row_to_dict(row: sqlite3.Row | None) -> dict[str, Any] | None:
-    """Convert a :class:`sqlite3.Row` to a plain dict, or return ``None``."""
-    return dict(row) if row is not None else None
+from data_project_manager.db.repositories._helpers import now_iso, row_to_dict
 
 
 class ProjectRootRepository:
@@ -56,7 +47,7 @@ class ProjectRootRepository:
             The newly created root as a dict.
         """
         root_id = str(uuid.uuid4())
-        created_at = _now()
+        created_at = now_iso()
         with self._conn:
             self._conn.execute(
                 """
@@ -80,7 +71,7 @@ class ProjectRootRepository:
         row = self._conn.execute(
             "SELECT * FROM project_root WHERE id = ?", (root_id,)
         ).fetchone()
-        return _row_to_dict(row)
+        return row_to_dict(row)
 
     def get_by_name(self, name: str) -> dict[str, Any] | None:
         """Fetch a root by its label.
@@ -94,7 +85,7 @@ class ProjectRootRepository:
         row = self._conn.execute(
             "SELECT * FROM project_root WHERE name = ?", (name,)
         ).fetchone()
-        return _row_to_dict(row)
+        return row_to_dict(row)
 
     def get_default(self) -> dict[str, Any] | None:
         """Return the default root, or ``None`` if none is marked default.
@@ -105,7 +96,7 @@ class ProjectRootRepository:
         row = self._conn.execute(
             "SELECT * FROM project_root WHERE is_default = 1 LIMIT 1"
         ).fetchone()
-        return _row_to_dict(row)
+        return row_to_dict(row)
 
     def list(self) -> list[dict[str, Any]]:
         """Return all roots ordered by name.
@@ -215,7 +206,7 @@ class ProjectRepository:
                 f"Invalid status {status!r}. Must be one of {self.VALID_STATUSES}."
             )
         project_id = str(uuid.uuid4())
-        now = _now()
+        now = now_iso()
         try:
             with self._conn:
                 self._conn.execute(
@@ -278,7 +269,7 @@ class ProjectRepository:
         row = self._conn.execute(
             "SELECT * FROM project WHERE id = ?", (project_id,)
         ).fetchone()
-        return _row_to_dict(row)
+        return row_to_dict(row)
 
     def get_by_slug(self, slug: str) -> dict[str, Any] | None:
         """Fetch a project by its slug.
@@ -292,7 +283,7 @@ class ProjectRepository:
         row = self._conn.execute(
             "SELECT * FROM project WHERE slug = ?", (slug,)
         ).fetchone()
-        return _row_to_dict(row)
+        return row_to_dict(row)
 
     def list(
         self,
@@ -363,7 +354,7 @@ class ProjectRepository:
                 f"Must be one of {self.VALID_STATUSES}."
             )
 
-        fields["updated_at"] = _now()
+        fields["updated_at"] = now_iso()
         set_clause = ", ".join(f"{k} = ?" for k in fields)
         values = list(fields.values()) + [project_id]
         with self._conn:

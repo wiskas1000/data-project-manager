@@ -12,18 +12,9 @@ Example::
 
 import sqlite3
 import uuid
-from datetime import UTC, datetime
 from typing import Any
 
-
-def _now() -> str:
-    """Return the current UTC time as an ISO 8601 string."""
-    return datetime.now(UTC).isoformat()
-
-
-def _row_to_dict(row: sqlite3.Row | None) -> dict[str, Any] | None:
-    """Convert a :class:`sqlite3.Row` to a plain dict, or return ``None``."""
-    return dict(row) if row is not None else None
+from data_project_manager.db.repositories._helpers import now_iso, row_to_dict
 
 
 class DeliverableRepository:
@@ -61,7 +52,7 @@ class DeliverableRepository:
             The newly created deliverable as a dict.
         """
         deliverable_id = str(uuid.uuid4())
-        now = _now()
+        now = now_iso()
         with self._conn:
             self._conn.execute(
                 """
@@ -95,7 +86,7 @@ class DeliverableRepository:
         row = self._conn.execute(
             "SELECT * FROM deliverable WHERE id = ?", (deliverable_id,)
         ).fetchone()
-        return _row_to_dict(row)
+        return row_to_dict(row)
 
     def list_for_project(self, project_id: str) -> list[dict[str, Any]]:
         """Return all deliverables for a project.
@@ -124,13 +115,13 @@ class DeliverableRepository:
         Raises:
             ValueError: If the deliverable does not exist.
         """
-        if self.get(deliverable_id) is None:
-            raise ValueError(f"Deliverable {deliverable_id!r} not found.")
         with self._conn:
-            self._conn.execute(
+            cursor = self._conn.execute(
                 "UPDATE deliverable SET delivered_at = ? WHERE id = ?",
-                (_now(), deliverable_id),
+                (now_iso(), deliverable_id),
             )
+            if cursor.rowcount == 0:
+                raise ValueError(f"Deliverable {deliverable_id!r} not found.")
         return self.get(deliverable_id)  # type: ignore[return-value]
 
 

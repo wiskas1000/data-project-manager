@@ -16,18 +16,9 @@ Example::
 
 import sqlite3
 import uuid
-from datetime import UTC, datetime
 from typing import Any
 
-
-def _now() -> str:
-    """Return the current UTC time as an ISO 8601 string."""
-    return datetime.now(UTC).isoformat()
-
-
-def _row_to_dict(row: sqlite3.Row | None) -> dict[str, Any] | None:
-    """Convert a :class:`sqlite3.Row` to a plain dict, or return ``None``."""
-    return dict(row) if row is not None else None
+from data_project_manager.db.repositories._helpers import now_iso, row_to_dict
 
 
 class EntityTypeRepository:
@@ -46,23 +37,24 @@ class EntityTypeRepository:
     def create(self, *, name: str) -> dict[str, Any]:
         """Insert a new entity type and return it as a dict.
 
-        If a type with the same name already exists the existing record is
-        returned unchanged.
+        The *name* is normalised to lowercase.  If a type with the same
+        name already exists the existing record is returned unchanged.
 
         Args:
-            name: Entity type label (stored as-is).
+            name: Entity type label (normalised to lowercase).
 
         Returns:
             The entity type as a dict (newly created or existing).
         """
-        existing = self.get_by_name(name)
+        normalised = name.strip().lower()
+        existing = self.get_by_name(normalised)
         if existing is not None:
             return existing
         type_id = str(uuid.uuid4())
         with self._conn:
             self._conn.execute(
                 "INSERT INTO entity_type (id, name) VALUES (?, ?)",
-                (type_id, name),
+                (type_id, normalised),
             )
         return self.get(type_id)  # type: ignore[return-value]
 
@@ -78,21 +70,22 @@ class EntityTypeRepository:
         row = self._conn.execute(
             "SELECT * FROM entity_type WHERE id = ?", (type_id,)
         ).fetchone()
-        return _row_to_dict(row)
+        return row_to_dict(row)
 
     def get_by_name(self, name: str) -> dict[str, Any] | None:
-        """Fetch an entity type by name.
+        """Fetch an entity type by name (case-insensitive).
 
         Args:
-            name: Exact name to look up.
+            name: Name to look up (compared as lowercase).
 
         Returns:
             Entity type dict, or ``None`` if not found.
         """
         row = self._conn.execute(
-            "SELECT * FROM entity_type WHERE name = ?", (name,)
+            "SELECT * FROM entity_type WHERE name = ?",
+            (name.strip().lower(),),
         ).fetchone()
-        return _row_to_dict(row)
+        return row_to_dict(row)
 
     def list(self) -> list[dict[str, Any]]:
         """Return all entity types ordered by name.
@@ -119,23 +112,24 @@ class AggregationLevelRepository:
     def create(self, *, name: str) -> dict[str, Any]:
         """Insert a new aggregation level and return it as a dict.
 
-        If a level with the same name already exists the existing record is
-        returned unchanged.
+        The *name* is normalised to lowercase.  If a level with the same
+        name already exists the existing record is returned unchanged.
 
         Args:
-            name: Aggregation level label (e.g. ``"row"``, ``"monthly"``).
+            name: Aggregation level label (normalised to lowercase).
 
         Returns:
             The aggregation level as a dict (newly created or existing).
         """
-        existing = self.get_by_name(name)
+        normalised = name.strip().lower()
+        existing = self.get_by_name(normalised)
         if existing is not None:
             return existing
         level_id = str(uuid.uuid4())
         with self._conn:
             self._conn.execute(
                 "INSERT INTO aggregation_level (id, name) VALUES (?, ?)",
-                (level_id, name),
+                (level_id, normalised),
             )
         return self.get(level_id)  # type: ignore[return-value]
 
@@ -151,21 +145,22 @@ class AggregationLevelRepository:
         row = self._conn.execute(
             "SELECT * FROM aggregation_level WHERE id = ?", (level_id,)
         ).fetchone()
-        return _row_to_dict(row)
+        return row_to_dict(row)
 
     def get_by_name(self, name: str) -> dict[str, Any] | None:
-        """Fetch an aggregation level by name.
+        """Fetch an aggregation level by name (case-insensitive).
 
         Args:
-            name: Exact name to look up.
+            name: Name to look up (compared as lowercase).
 
         Returns:
             Aggregation level dict, or ``None`` if not found.
         """
         row = self._conn.execute(
-            "SELECT * FROM aggregation_level WHERE name = ?", (name,)
+            "SELECT * FROM aggregation_level WHERE name = ?",
+            (name.strip().lower(),),
         ).fetchone()
-        return _row_to_dict(row)
+        return row_to_dict(row)
 
     def list(self) -> list[dict[str, Any]]:
         """Return all aggregation levels ordered by name.
@@ -219,7 +214,7 @@ class DataFileRepository:
             The newly created data file as a dict.
         """
         file_id = str(uuid.uuid4())
-        now = _now()
+        now = now_iso()
         with self._conn:
             self._conn.execute(
                 """
@@ -256,7 +251,7 @@ class DataFileRepository:
         row = self._conn.execute(
             "SELECT * FROM data_file WHERE id = ?", (file_id,)
         ).fetchone()
-        return _row_to_dict(row)
+        return row_to_dict(row)
 
     def list_for_project(self, project_id: str) -> list[dict[str, Any]]:
         """Return all data files for a project.
@@ -285,13 +280,13 @@ class DataFileRepository:
         Raises:
             ValueError: If the file does not exist.
         """
-        if self.get(file_id) is None:
-            raise ValueError(f"DataFile {file_id!r} not found.")
         with self._conn:
-            self._conn.execute(
+            cursor = self._conn.execute(
                 "UPDATE data_file SET purged_at = ? WHERE id = ?",
-                (_now(), file_id),
+                (now_iso(), file_id),
             )
+            if cursor.rowcount == 0:
+                raise ValueError(f"DataFile {file_id!r} not found.")
         return self.get(file_id)  # type: ignore[return-value]
 
 

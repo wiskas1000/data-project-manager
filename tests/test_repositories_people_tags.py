@@ -1,38 +1,16 @@
 """Tests for db/repositories/person.py and db/repositories/tag.py."""
 
-import sqlite3
-
 import pytest
+from helpers import fresh_conn, make_project
 
 from data_project_manager.db.repositories.person import (
     PersonRepository,
     ProjectPersonRepository,
 )
-from data_project_manager.db.repositories.project import (
-    ProjectRepository,
-)
 from data_project_manager.db.repositories.tag import (
     ProjectTagRepository,
     TagRepository,
 )
-from data_project_manager.db.schema import migrate
-
-
-def fresh_conn() -> sqlite3.Connection:
-    """Return a migrated in-memory connection."""
-    conn = sqlite3.connect(":memory:")
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys=ON")
-    migrate(conn)
-    return conn
-
-
-def _make_project(conn: sqlite3.Connection, title: str = "Test") -> dict:
-    """Create a minimal project and return it."""
-    return ProjectRepository(conn).create(
-        title=title, slug=f"2026-01-01-{title.lower().replace(' ', '-')}"
-    )
-
 
 # ---------------------------------------------------------------------------
 # PersonRepository
@@ -170,7 +148,7 @@ class TestPersonRepository:
 class TestProjectPersonRepository:
     def test_add_and_list_for_project(self) -> None:
         conn = fresh_conn()
-        project = _make_project(conn)
+        project = make_project(conn)
         person = PersonRepository(conn).create(first_name="Jane", last_name="Doe")
         pp = ProjectPersonRepository(conn)
         pp.add(
@@ -185,7 +163,7 @@ class TestProjectPersonRepository:
 
     def test_add_duplicate_ignored(self) -> None:
         conn = fresh_conn()
-        project = _make_project(conn)
+        project = make_project(conn)
         person = PersonRepository(conn).create(first_name="A", last_name="B")
         pp = ProjectPersonRepository(conn)
         pp.add(
@@ -202,7 +180,7 @@ class TestProjectPersonRepository:
 
     def test_same_person_multiple_roles(self) -> None:
         conn = fresh_conn()
-        project = _make_project(conn)
+        project = make_project(conn)
         person = PersonRepository(conn).create(first_name="A", last_name="B")
         pp = ProjectPersonRepository(conn)
         pp.add(
@@ -219,7 +197,7 @@ class TestProjectPersonRepository:
 
     def test_remove(self) -> None:
         conn = fresh_conn()
-        project = _make_project(conn)
+        project = make_project(conn)
         person = PersonRepository(conn).create(first_name="A", last_name="B")
         pp = ProjectPersonRepository(conn)
         pp.add(
@@ -236,8 +214,8 @@ class TestProjectPersonRepository:
 
     def test_list_for_person(self) -> None:
         conn = fresh_conn()
-        p1 = _make_project(conn, "Project A")
-        p2 = _make_project(conn, "Project B")
+        p1 = make_project(conn, "Project A")
+        p2 = make_project(conn, "Project B")
         person = PersonRepository(conn).create(first_name="A", last_name="B")
         pp = ProjectPersonRepository(conn)
         pp.add(project_id=p1["id"], person_id=person["id"], role="requestor")
@@ -311,7 +289,7 @@ class TestTagRepository:
 class TestProjectTagRepository:
     def test_add_and_list_for_project(self) -> None:
         conn = fresh_conn()
-        project = _make_project(conn)
+        project = make_project(conn)
         tag = TagRepository(conn).create(name="ml")
         pt = ProjectTagRepository(conn)
         pt.add(project_id=project["id"], tag_id=tag["id"])
@@ -321,7 +299,7 @@ class TestProjectTagRepository:
 
     def test_add_duplicate_ignored(self) -> None:
         conn = fresh_conn()
-        project = _make_project(conn)
+        project = make_project(conn)
         tag = TagRepository(conn).create(name="ml")
         pt = ProjectTagRepository(conn)
         pt.add(project_id=project["id"], tag_id=tag["id"])
@@ -330,7 +308,7 @@ class TestProjectTagRepository:
 
     def test_remove(self) -> None:
         conn = fresh_conn()
-        project = _make_project(conn)
+        project = make_project(conn)
         tag = TagRepository(conn).create(name="ml")
         pt = ProjectTagRepository(conn)
         pt.add(project_id=project["id"], tag_id=tag["id"])
@@ -339,8 +317,8 @@ class TestProjectTagRepository:
 
     def test_list_projects_for_tag(self) -> None:
         conn = fresh_conn()
-        p1 = _make_project(conn, "A")
-        p2 = _make_project(conn, "B")
+        p1 = make_project(conn, "A")
+        p2 = make_project(conn, "B")
         tag = TagRepository(conn).create(name="shared-tag")
         pt = ProjectTagRepository(conn)
         pt.add(project_id=p1["id"], tag_id=tag["id"])

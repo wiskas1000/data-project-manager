@@ -19,10 +19,7 @@ import sqlite3
 import uuid
 from typing import Any
 
-
-def _row_to_dict(row: sqlite3.Row | None) -> dict[str, Any] | None:
-    """Convert a :class:`sqlite3.Row` to a plain dict, or return ``None``."""
-    return dict(row) if row is not None else None
+from data_project_manager.db.repositories._helpers import row_to_dict
 
 
 class RequestQuestionRepository:
@@ -90,7 +87,7 @@ class RequestQuestionRepository:
         row = self._conn.execute(
             "SELECT * FROM request_question WHERE id = ?", (question_id,)
         ).fetchone()
-        return _row_to_dict(row)
+        return row_to_dict(row)
 
     def list_for_project(self, project_id: str) -> list[dict[str, Any]]:
         """Return all request questions for a project.
@@ -99,10 +96,10 @@ class RequestQuestionRepository:
             project_id: UUID of the project.
 
         Returns:
-            List of request question dicts ordered by insertion order (id).
+            List of request question dicts ordered by insertion order.
         """
         rows = self._conn.execute(
-            "SELECT * FROM request_question WHERE project_id = ? ORDER BY id",
+            "SELECT * FROM request_question WHERE project_id = ? ORDER BY rowid",
             (project_id,),
         ).fetchall()
         return [dict(r) for r in rows]

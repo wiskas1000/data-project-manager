@@ -1,28 +1,13 @@
 """Tests for db/connection.py, db/schema.py, and db/repositories/project.py."""
 
-import sqlite3
-
 import pytest
+from helpers import fresh_conn
 
 from data_project_manager.db.repositories.project import (
     ProjectRepository,
     ProjectRootRepository,
 )
 from data_project_manager.db.schema import SCHEMA_VERSION, get_schema_version, migrate
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def fresh_conn() -> sqlite3.Connection:
-    """Return a migrated in-memory connection."""
-    conn = sqlite3.connect(":memory:")
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys=ON")
-    migrate(conn)
-    return conn
-
 
 # ---------------------------------------------------------------------------
 # schema

@@ -13,18 +13,9 @@ Example::
 
 import sqlite3
 import uuid
-from datetime import UTC, datetime
 from typing import Any
 
-
-def _now() -> str:
-    """Return the current UTC time as an ISO 8601 string."""
-    return datetime.now(UTC).isoformat()
-
-
-def _row_to_dict(row: sqlite3.Row | None) -> dict[str, Any] | None:
-    """Convert a :class:`sqlite3.Row` to a plain dict, or return ``None``."""
-    return dict(row) if row is not None else None
+from data_project_manager.db.repositories._helpers import now_iso, row_to_dict
 
 
 class QueryRepository:
@@ -94,7 +85,7 @@ class QueryRepository:
         row = self._conn.execute(
             "SELECT * FROM query WHERE id = ?", (query_id,)
         ).fetchone()
-        return _row_to_dict(row)
+        return row_to_dict(row)
 
     def list(self) -> list[dict[str, Any]]:
         """Return all query records ordered by query path.
@@ -117,11 +108,11 @@ class QueryRepository:
         Raises:
             ValueError: If the query does not exist.
         """
-        if self.get(query_id) is None:
-            raise ValueError(f"Query {query_id!r} not found.")
         with self._conn:
-            self._conn.execute(
+            cursor = self._conn.execute(
                 "UPDATE query SET executed_at = ? WHERE id = ?",
-                (_now(), query_id),
+                (now_iso(), query_id),
             )
+            if cursor.rowcount == 0:
+                raise ValueError(f"Query {query_id!r} not found.")
         return self.get(query_id)  # type: ignore[return-value]

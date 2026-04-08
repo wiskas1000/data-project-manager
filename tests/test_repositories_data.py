@@ -3,6 +3,7 @@
 import sqlite3
 
 import pytest
+from helpers import fresh_conn, make_project
 
 from data_project_manager.db.repositories.data_file import (
     AggregationLevelRepository,
@@ -15,27 +16,8 @@ from data_project_manager.db.repositories.deliverable import (
     DeliverableDataFileRepository,
     DeliverableRepository,
 )
-from data_project_manager.db.repositories.project import ProjectRepository
 from data_project_manager.db.repositories.query import QueryRepository
 from data_project_manager.db.repositories.question import RequestQuestionRepository
-from data_project_manager.db.schema import migrate
-
-
-def fresh_conn() -> sqlite3.Connection:
-    """Return a migrated in-memory connection."""
-    conn = sqlite3.connect(":memory:")
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys=ON")
-    migrate(conn)
-    return conn
-
-
-def _make_project(conn: sqlite3.Connection, title: str = "Test") -> dict:
-    """Create a minimal project and return it."""
-    return ProjectRepository(conn).create(
-        title=title, slug=f"2026-01-01-{title.lower().replace(' ', '-')}"
-    )
-
 
 # ---------------------------------------------------------------------------
 # EntityTypeRepository
@@ -119,7 +101,7 @@ class TestAggregationLevelRepository:
 class TestDataFileRepository:
     def test_create_minimal(self) -> None:
         conn = fresh_conn()
-        project = _make_project(conn)
+        project = make_project(conn)
         repo = DataFileRepository(conn)
         f = repo.create(project_id=project["id"], file_path="data/raw/sales.csv")
         assert f["file_path"] == "data/raw/sales.csv"
@@ -128,7 +110,7 @@ class TestDataFileRepository:
 
     def test_create_all_fields(self) -> None:
         conn = fresh_conn()
-        project = _make_project(conn)
+        project = make_project(conn)
         repo = DataFileRepository(conn)
         f = repo.create(
             project_id=project["id"],
@@ -147,7 +129,7 @@ class TestDataFileRepository:
 
     def test_get_existing(self) -> None:
         conn = fresh_conn()
-        project = _make_project(conn)
+        project = make_project(conn)
         repo = DataFileRepository(conn)
         f = repo.create(project_id=project["id"], file_path="data/raw/x.csv")
         assert repo.get(f["id"]) == f
@@ -158,7 +140,7 @@ class TestDataFileRepository:
 
     def test_list_for_project(self) -> None:
         conn = fresh_conn()
-        project = _make_project(conn)
+        project = make_project(conn)
         repo = DataFileRepository(conn)
         repo.create(project_id=project["id"], file_path="data/raw/b.csv")
         repo.create(project_id=project["id"], file_path="data/raw/a.csv")
@@ -168,12 +150,12 @@ class TestDataFileRepository:
 
     def test_list_for_project_empty(self) -> None:
         conn = fresh_conn()
-        project = _make_project(conn)
+        project = make_project(conn)
         assert DataFileRepository(conn).list_for_project(project["id"]) == []
 
     def test_mark_purged(self) -> None:
         conn = fresh_conn()
-        project = _make_project(conn)
+        project = make_project(conn)
         repo = DataFileRepository(conn)
         f = repo.create(project_id=project["id"], file_path="data/raw/x.csv")
         updated = repo.mark_purged(f["id"])
@@ -192,7 +174,7 @@ class TestDataFileRepository:
 
 class TestDataFileEntityTypeRepository:
     def _make_file(self, conn: sqlite3.Connection) -> dict:
-        project = _make_project(conn)
+        project = make_project(conn)
         return DataFileRepository(conn).create(
             project_id=project["id"], file_path="data/raw/x.csv"
         )
@@ -248,7 +230,7 @@ class TestDataFileEntityTypeRepository:
 
 class TestDataFileAggregationRepository:
     def _make_file(self, conn: sqlite3.Connection) -> dict:
-        project = _make_project(conn)
+        project = make_project(conn)
         return DataFileRepository(conn).create(
             project_id=project["id"], file_path="data/raw/x.csv"
         )
@@ -298,7 +280,7 @@ class TestQueryRepository:
 
     def test_create_with_file_links(self) -> None:
         conn = fresh_conn()
-        project = _make_project(conn)
+        project = make_project(conn)
         src = DataFileRepository(conn).create(
             project_id=project["id"], file_path="data/raw/x.csv"
         )
@@ -350,7 +332,7 @@ class TestQueryRepository:
 class TestDeliverableRepository:
     def test_create_minimal(self) -> None:
         conn = fresh_conn()
-        project = _make_project(conn)
+        project = make_project(conn)
         repo = DeliverableRepository(conn)
         d = repo.create(project_id=project["id"], type="report")
         assert d["type"] == "report"
@@ -358,7 +340,7 @@ class TestDeliverableRepository:
 
     def test_create_all_fields(self) -> None:
         conn = fresh_conn()
-        project = _make_project(conn)
+        project = make_project(conn)
         repo = DeliverableRepository(conn)
         d = repo.create(
             project_id=project["id"],
@@ -378,7 +360,7 @@ class TestDeliverableRepository:
 
     def test_list_for_project_ordered(self) -> None:
         conn = fresh_conn()
-        project = _make_project(conn)
+        project = make_project(conn)
         repo = DeliverableRepository(conn)
         repo.create(project_id=project["id"], type="report")
         repo.create(project_id=project["id"], type="dashboard")
@@ -387,12 +369,12 @@ class TestDeliverableRepository:
 
     def test_list_for_project_empty(self) -> None:
         conn = fresh_conn()
-        project = _make_project(conn)
+        project = make_project(conn)
         assert DeliverableRepository(conn).list_for_project(project["id"]) == []
 
     def test_mark_delivered(self) -> None:
         conn = fresh_conn()
-        project = _make_project(conn)
+        project = make_project(conn)
         repo = DeliverableRepository(conn)
         d = repo.create(project_id=project["id"], type="report")
         updated = repo.mark_delivered(d["id"])
@@ -412,7 +394,7 @@ class TestDeliverableRepository:
 class TestDeliverableDataFileRepository:
     def test_add_and_list(self) -> None:
         conn = fresh_conn()
-        project = _make_project(conn)
+        project = make_project(conn)
         d = DeliverableRepository(conn).create(project_id=project["id"], type="report")
         f = DataFileRepository(conn).create(
             project_id=project["id"], file_path="data/raw/x.csv"
@@ -425,7 +407,7 @@ class TestDeliverableDataFileRepository:
 
     def test_add_duplicate_ignored(self) -> None:
         conn = fresh_conn()
-        project = _make_project(conn)
+        project = make_project(conn)
         d = DeliverableRepository(conn).create(project_id=project["id"], type="report")
         f = DataFileRepository(conn).create(
             project_id=project["id"], file_path="data/raw/x.csv"
@@ -437,7 +419,7 @@ class TestDeliverableDataFileRepository:
 
     def test_remove(self) -> None:
         conn = fresh_conn()
-        project = _make_project(conn)
+        project = make_project(conn)
         d = DeliverableRepository(conn).create(project_id=project["id"], type="report")
         f = DataFileRepository(conn).create(
             project_id=project["id"], file_path="data/raw/x.csv"
@@ -456,7 +438,7 @@ class TestDeliverableDataFileRepository:
 class TestRequestQuestionRepository:
     def test_create_minimal(self) -> None:
         conn = fresh_conn()
-        project = _make_project(conn)
+        project = make_project(conn)
         repo = RequestQuestionRepository(conn)
         q = repo.create(
             project_id=project["id"],
@@ -467,7 +449,7 @@ class TestRequestQuestionRepository:
 
     def test_create_with_period(self) -> None:
         conn = fresh_conn()
-        project = _make_project(conn)
+        project = make_project(conn)
         repo = RequestQuestionRepository(conn)
         q = repo.create(
             project_id=project["id"],
@@ -484,7 +466,7 @@ class TestRequestQuestionRepository:
 
     def test_list_for_project(self) -> None:
         conn = fresh_conn()
-        project = _make_project(conn)
+        project = make_project(conn)
         repo = RequestQuestionRepository(conn)
         repo.create(project_id=project["id"], question_text="Q1?")
         repo.create(project_id=project["id"], question_text="Q2?")
@@ -493,5 +475,5 @@ class TestRequestQuestionRepository:
 
     def test_list_for_project_empty(self) -> None:
         conn = fresh_conn()
-        project = _make_project(conn)
+        project = make_project(conn)
         assert RequestQuestionRepository(conn).list_for_project(project["id"]) == []
