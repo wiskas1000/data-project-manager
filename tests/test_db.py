@@ -57,6 +57,66 @@ def test_migrate_creates_project_root_table() -> None:
     assert row is not None
 
 
+def test_schema_version_is_2() -> None:
+    assert SCHEMA_VERSION == 2
+
+
+_MIGRATION_2_TABLES = [
+    "person",
+    "project_person",
+    "tag",
+    "project_tag",
+    "data_file",
+    "entity_type",
+    "aggregation_level",
+    "data_file_entity_type",
+    "data_file_aggregation",
+    "query",
+    "deliverable",
+    "deliverable_data_file",
+    "request_question",
+    "change_log",
+]
+
+
+@pytest.mark.parametrize("table_name", _MIGRATION_2_TABLES)
+def test_migration_2_creates_table(table_name: str) -> None:
+    conn = fresh_conn()
+    row = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+        (table_name,),
+    ).fetchone()
+    assert row is not None, f"Table {table_name} not created"
+
+
+def test_seed_entity_types() -> None:
+    conn = fresh_conn()
+    rows = conn.execute("SELECT name FROM entity_type ORDER BY name").fetchall()
+    names = [r["name"] for r in rows]
+    assert "customers" in names
+    assert "transactions" in names
+    assert len(names) >= 6
+
+
+def test_seed_aggregation_levels() -> None:
+    conn = fresh_conn()
+    rows = conn.execute("SELECT name FROM aggregation_level ORDER BY name").fetchall()
+    names = [r["name"] for r in rows]
+    assert "row" in names
+    assert "daily" in names
+    assert "monthly" in names
+    assert len(names) >= 7
+
+
+def test_migration_2_idempotent() -> None:
+    conn = fresh_conn()
+    migrate(conn)  # second call
+    assert get_schema_version(conn) == SCHEMA_VERSION
+    # Seed data should not duplicate (INSERT OR IGNORE)
+    count = conn.execute("SELECT COUNT(*) FROM entity_type").fetchone()[0]
+    assert count == 6
+
+
 # ---------------------------------------------------------------------------
 # ProjectRootRepository
 # ---------------------------------------------------------------------------
