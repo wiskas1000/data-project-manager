@@ -214,6 +214,34 @@ def test_project_update_no_fields() -> None:
     assert result == repo.get(p["id"])
 
 
+def test_project_create_duplicate_slug_raises_value_error() -> None:
+    conn = fresh_conn()
+    repo = ProjectRepository(conn)
+    repo.create(title="T", slug="2026-04-07-duplicate")
+    with pytest.raises(ValueError, match="already exists"):
+        repo.create(title="T2", slug="2026-04-07-duplicate")
+
+
+def test_project_update_rejects_immutable_columns() -> None:
+    conn = fresh_conn()
+    repo = ProjectRepository(conn)
+    p = repo.create(title="T", slug="s")
+    with pytest.raises(ValueError, match="immutable or unknown"):
+        repo.update(p["id"], id="new-id")
+    with pytest.raises(ValueError, match="immutable or unknown"):
+        repo.update(p["id"], created_at="2020-01-01")
+    with pytest.raises(ValueError, match="immutable or unknown"):
+        repo.update(p["id"], slug="new-slug")
+
+
+def test_project_update_rejects_unknown_columns() -> None:
+    conn = fresh_conn()
+    repo = ProjectRepository(conn)
+    p = repo.create(title="T", slug="s")
+    with pytest.raises(ValueError, match="immutable or unknown"):
+        repo.update(p["id"], nonexistent_field="value")
+
+
 def test_project_with_root_fk() -> None:
     conn = fresh_conn()
     root_repo = ProjectRootRepository(conn)

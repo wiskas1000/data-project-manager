@@ -139,6 +139,26 @@ class ProjectRepository:
 
     VALID_STATUSES = {"active", "paused", "done", "archived"}
 
+    #: Columns that may be changed via :meth:`update`.
+    UPDATABLE_COLUMNS = {
+        "title",
+        "description",
+        "status",
+        "is_adhoc",
+        "domain",
+        "root_id",
+        "external_url",
+        "request_date",
+        "expected_start",
+        "expected_end",
+        "realized_start",
+        "realized_end",
+        "estimated_hours",
+        "relative_path",
+        "has_git_repo",
+        "template_used",
+    }
+
     def __init__(self, conn: sqlite3.Connection) -> None:
         self._conn = conn
 
@@ -196,46 +216,54 @@ class ProjectRepository:
             )
         project_id = str(uuid.uuid4())
         now = _now()
-        with self._conn:
-            self._conn.execute(
-                """
-                INSERT INTO project (
-                    id, slug, title, description, status, is_adhoc, domain,
-                    root_id, external_url, request_date, expected_start,
-                    expected_end, realized_start, realized_end,
-                    estimated_hours, relative_path, has_git_repo,
-                    template_used, created_at, updated_at
-                ) VALUES (
-                    ?, ?, ?, ?, ?, ?, ?,
-                    ?, ?, ?, ?,
-                    ?, ?, ?,
-                    ?, ?, ?,
-                    ?, ?, ?
+        try:
+            with self._conn:
+                self._conn.execute(
+                    """
+                    INSERT INTO project (
+                        id, slug, title, description, status, is_adhoc, domain,
+                        root_id, external_url, request_date, expected_start,
+                        expected_end, realized_start, realized_end,
+                        estimated_hours, relative_path, has_git_repo,
+                        template_used, created_at, updated_at
+                    ) VALUES (
+                        ?, ?, ?, ?, ?, ?, ?,
+                        ?, ?, ?, ?,
+                        ?, ?, ?,
+                        ?, ?, ?,
+                        ?, ?, ?
+                    )
+                    """,
+                    (
+                        project_id,
+                        slug,
+                        title,
+                        description,
+                        status,
+                        int(is_adhoc),
+                        domain,
+                        root_id,
+                        external_url,
+                        request_date,
+                        expected_start,
+                        expected_end,
+                        realized_start,
+                        realized_end,
+                        estimated_hours,
+                        relative_path,
+                        int(has_git_repo),
+                        template_used,
+                        now,
+                        now,
+                    ),
                 )
-                """,
-                (
-                    project_id,
-                    slug,
-                    title,
-                    description,
-                    status,
-                    int(is_adhoc),
-                    domain,
-                    root_id,
-                    external_url,
-                    request_date,
-                    expected_start,
-                    expected_end,
-                    realized_start,
-                    realized_end,
-                    estimated_hours,
-                    relative_path,
-                    int(has_git_repo),
-                    template_used,
-                    now,
-                    now,
-                ),
-            )
+        except sqlite3.IntegrityError as exc:
+            if "slug" in str(exc).lower() or "unique" in str(exc).lower():
+                raise ValueError(
+                    f"A project with slug {slug!r} already exists. "
+                    f"Choose a different title or wait until tomorrow."
+                ) from exc
+            raise
         return self.get(project_id)  # type: ignore[return-value]
 
     def get(self, project_id: str) -> dict[str, Any] | None:
@@ -321,6 +349,13 @@ class ProjectRepository:
         """
         if not fields:
             return self.get(project_id)
+
+        bad_keys = set(fields) - self.UPDATABLE_COLUMNS
+        if bad_keys:
+            raise ValueError(
+                f"Cannot update immutable or unknown column(s): {bad_keys}. "
+                f"Allowed: {sorted(self.UPDATABLE_COLUMNS)}"
+            )
 
         if "status" in fields and fields["status"] not in self.VALID_STATUSES:
             raise ValueError(
