@@ -32,7 +32,7 @@ Bootstrap the project on main:
    - name: data_project_manager, requires-python >=3.11
    - dependencies = [] (zero runtime deps)
    - [project.optional-dependencies] enhanced = ["typer[all]"]
-   - CLI entry point: datapm = "data_project_manager.cli.app:app"
+   - CLI entry point: datapm = "data_project_manager.cli:main"
    - [tool.ruff] and [tool.pytest.ini_options] per CLAUDE.md
 4. uv add --dev pytest pytest-cov ruff pre-commit sphinx sphinx-autodoc-typehints
 5. uv add --optional enhanced "typer[all]"
