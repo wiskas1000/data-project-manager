@@ -18,18 +18,49 @@ def main() -> None:
     new_parser = subparsers.add_parser("new", help="Create a new project")
     new_parser.add_argument("name", nargs="?", help="Project name")
     new_parser.add_argument("--domain", help="Subject area")
-    new_parser.add_argument(
-        "--folders",
-        nargs="*",
-        metavar="FOLDER",
-        help="Optional folder groups to add (data src literatuur resultaten notebooks)",
-    )
-    new_parser.add_argument(
-        "--git", action="store_true", help="Run git init in the project folder"
-    )
     new_parser.add_argument("--description", help="Free-text description")
     new_parser.add_argument(
-        "--adhoc", action="store_true", help="Mark as an ad-hoc request"
+        "--type",
+        dest="archetype",
+        help="Project archetype (minimal, analysis, modeling, "
+        "reporting, research, full)",
+    )
+    new_parser.add_argument(
+        "--folder",
+        dest="folders",
+        action="append",
+        metavar="KEY",
+        help="Explicit folder key (repeatable, bypasses archetype)",
+    )
+    new_parser.add_argument(
+        "--add",
+        action="append",
+        metavar="KEY",
+        help="Add folder to archetype defaults",
+    )
+    new_parser.add_argument(
+        "--remove",
+        action="append",
+        metavar="KEY",
+        help="Remove folder from archetype defaults",
+    )
+    git_group = new_parser.add_mutually_exclusive_group()
+    git_group.add_argument(
+        "--git",
+        action="store_true",
+        default=None,
+        help="Initialise git in src/",
+    )
+    git_group.add_argument(
+        "--no-git",
+        action="store_true",
+        default=None,
+        help="Skip git initialisation",
+    )
+    new_parser.add_argument(
+        "--adhoc",
+        action="store_true",
+        help="Mark as an ad-hoc request",
     )
 
     # list
@@ -48,7 +79,9 @@ def main() -> None:
         "init", help="Create ~/.datapm/config.json with defaults"
     )
     config_init.add_argument(
-        "--force", action="store_true", help="Overwrite existing config"
+        "--force",
+        action="store_true",
+        help="Overwrite existing config",
     )
 
     args = parser.parse_args()
@@ -72,9 +105,15 @@ def main() -> None:
 
 def _handle_new(args: argparse.Namespace) -> None:
     """Interactive or one-liner project creation."""
-    from data_project_manager.core.project import (
-        OPTIONAL_FOLDER_KEYS,
-        create_project,
+    from data_project_manager.config.loader import (
+        get_default_template,
+        get_folder_language,
+        get_git_init_default,
+    )
+    from data_project_manager.core.project import create_project
+    from data_project_manager.core.templates import (
+        get_archetype,
+        resolve_folders,
     )
 
     # -- Collect inputs (prompt for missing) ---------------------------------
@@ -84,16 +123,50 @@ def _handle_new(args: argparse.Namespace) -> None:
         "Description (optional): "
     )
 
-    # Optional folders — only prompt interactively when none given via CLI
-    optional_folders: list[str] = args.folders or []
-    if not args.folders and args.folders is not None:
-        # --folders was passed with no values: skip interactive prompt
-        optional_folders = []
-    elif args.folders is None:
-        # --folders was not passed at all: interactive
-        optional_folders = _prompt_folders(OPTIONAL_FOLDER_KEYS)
+    # -- Resolve archetype and folders ---------------------------------------
+    language = get_folder_language()
 
-    do_git_init: bool = args.git or _prompt_bool("Initialise git repo? [y/N] ")
+    if args.folders:
+        # Explicit --folder flags bypass archetype entirely
+        optional_folders = resolve_folders(args.folders)
+        template_key = "custom"
+    elif args.archetype:
+        # --type given: use archetype, apply --add/--remove
+        archetype = get_archetype(args.archetype)
+        optional_folders = resolve_folders(
+            archetype.folders, add=args.add, remove=args.remove
+        )
+        template_key = args.archetype
+    else:
+        # Interactive: archetype picker + folder toggles
+        default_key = get_default_template()
+        template_key = _prompt_archetype(default_key)
+        archetype = get_archetype(template_key)
+        optional_folders = resolve_folders(archetype.folders)
+
+        # Show toggles for adjustment
+        skip_toggles = args.add is None and args.remove is None
+        if skip_toggles:
+            optional_folders = _prompt_folder_toggles(optional_folders)
+        else:
+            optional_folders = resolve_folders(
+                archetype.folders, add=args.add, remove=args.remove
+            )
+
+    # -- Git init -----------------------------------------------------------
+    do_git_init: bool
+    if args.git:
+        do_git_init = True
+    elif args.no_git:
+        do_git_init = False
+    else:
+        config_default = get_git_init_default()
+        if config_default is not None:
+            do_git_init = config_default
+        elif "src" in optional_folders:
+            do_git_init = _prompt_bool("Initialise git in src/? [y/N] ")
+        else:
+            do_git_init = False
 
     print()
     print(f"Creating project '{name}' …")
@@ -106,8 +179,10 @@ def _handle_new(args: argparse.Namespace) -> None:
             is_adhoc=args.adhoc,
             optional_folders=optional_folders,
             do_git_init=do_git_init,
+            template_used=template_key,
+            language=language,
         )
-    except FileExistsError as exc:
+    except (FileExistsError, ValueError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         sys.exit(1)
 
@@ -116,6 +191,8 @@ def _handle_new(args: argparse.Namespace) -> None:
     print(f"  Status  : {result['status']}")
     if result.get("domain"):
         print(f"  Domain  : {result['domain']}")
+    if result.get("has_git_repo"):
+        print("  Git     : initialised in src/")
     print("\nDone.")
 
 
@@ -138,11 +215,15 @@ def _handle_list(args: argparse.Namespace) -> None:
     print(header)
     print("-" * len(header))
     for p in projects:
-        print(f"{p['slug']:<{col_slug}}  {p['status']:<{col_status}}  {p['title']}")
+        slug = p["slug"]
+        status = p["status"]
+        title = p["title"]
+        print(f"{slug:<{col_slug}}  {status:<{col_status}}  {title}")
 
 
 def _handle_config(
-    args: argparse.Namespace, config_parser: argparse.ArgumentParser
+    args: argparse.Namespace,
+    config_parser: argparse.ArgumentParser,
 ) -> None:
     """Dispatch config sub-commands."""
     if args.config_command is None:
@@ -185,18 +266,70 @@ def _prompt_bool(message: str) -> bool:
     return input(message).strip().lower() in {"y", "yes"}
 
 
-def _prompt_folders(keys: list[str]) -> list[str]:
-    """Prompt the user to choose optional folder groups."""
-    print(f"Optional folders ({', '.join(keys)}):")
-    print("  Enter names separated by spaces, or press Enter to skip.")
-    raw = input("  > ").strip()
+def _prompt_archetype(default_key: str = "analysis") -> str:
+    """Show a numbered archetype menu and return the selected key."""
+    from data_project_manager.core.templates import BUILT_IN_ARCHETYPES
+
+    keys = list(BUILT_IN_ARCHETYPES)
+    default_idx = keys.index(default_key) + 1 if default_key in keys else 2
+
+    print("\nProject type:")
+    for i, key in enumerate(keys, 1):
+        arch = BUILT_IN_ARCHETYPES[key]
+        marker = "*" if i == default_idx else " "
+        print(f"  {marker}[{i}] {arch.label:<12s} ({arch.description})")
+
+    raw = input(f"Select [1-{len(keys)}, default={default_idx}]: ").strip()
     if not raw:
-        return []
-    chosen = [k for k in raw.split() if k in keys]
-    unknown = [k for k in raw.split() if k not in keys]
-    if unknown:
-        print(f"  Ignoring unknown keys: {unknown}")
-    return chosen
+        return keys[default_idx - 1]
+    try:
+        choice = int(raw)
+        if 1 <= choice <= len(keys):
+            return keys[choice - 1]
+    except ValueError:
+        pass
+    print(f"  Invalid choice, using default: {default_key}")
+    return default_key
+
+
+def _prompt_folder_toggles(current: list[str]) -> list[str]:
+    """Show folder toggles and let the user adjust."""
+    from data_project_manager.core.templates import (
+        OPTIONAL_FOLDERS,
+        SRC_TOGGLES,
+        resolve_folders,
+    )
+
+    # Display order: top-level folders, then src children indented
+    display_order = [f for f in OPTIONAL_FOLDERS if f not in SRC_TOGGLES] + SRC_TOGGLES
+    selected = set(current)
+
+    print("\nFolders (enter numbers to toggle, Enter to confirm):")
+    for i, key in enumerate(display_order, 1):
+        check = "✓" if key in selected else " "
+        indent = "  " if key in SRC_TOGGLES else ""
+        label = key
+        if key in SRC_TOGGLES:
+            label = f"{key}/ (in src/)"
+        print(f"  [{i}] {check} {indent}{label}")
+
+    raw = input("Toggle [1-6] or Enter: ").strip()
+    if not raw:
+        return sorted(selected)
+
+    for token in raw.replace(",", " ").split():
+        try:
+            idx = int(token) - 1
+            if 0 <= idx < len(display_order):
+                key = display_order[idx]
+                if key in selected:
+                    selected.discard(key)
+                else:
+                    selected.add(key)
+        except ValueError:
+            continue
+
+    return resolve_folders(sorted(selected))
 
 
 if __name__ == "__main__":

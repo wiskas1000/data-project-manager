@@ -127,6 +127,65 @@ def get_root_path(root_name: str, config_path: Path | None = None) -> Path | Non
     return Path(entry["path"]) if entry and "path" in entry else None
 
 
+def get_default_template(config_path: Path | None = None) -> str:
+    """Return the default archetype/template key from config.
+
+    Args:
+        config_path: Override the default config location.  Useful in tests.
+
+    Returns:
+        Template key string (e.g. ``"analysis"``).  Falls back to
+        ``"analysis"`` if not set.
+    """
+    config = load_config(config_path)
+    return config.get("defaults", {}).get("template", "analysis")
+
+
+def get_folder_language(config_path: Path | None = None) -> str:
+    """Return the folder language preference from config.
+
+    Args:
+        config_path: Override the default config location.  Useful in tests.
+
+    Returns:
+        ``"nl"`` or ``"en"``.  Falls back to ``"nl"`` if not set.
+    """
+    config = load_config(config_path)
+    return config.get("preferences", {}).get("folder_language", "nl")
+
+
+def get_custom_templates(
+    config_path: Path | None = None,
+) -> dict[str, dict]:
+    """Return custom templates defined in config.
+
+    Args:
+        config_path: Override the default config location.  Useful in tests.
+
+    Returns:
+        Dict of template name → ``{"description": ..., "folders": [...]}``.
+    """
+    config = load_config(config_path)
+    return config.get("templates", {})
+
+
+def get_git_init_default(config_path: Path | None = None) -> bool | None:
+    """Return the ``defaults.git_init`` value from config.
+
+    Args:
+        config_path: Override the default config location.  Useful in tests.
+
+    Returns:
+        ``True``/``False`` if explicitly set, ``None`` if absent (meaning
+        the user should be prompted).
+    """
+    config = load_config(config_path)
+    val = config.get("defaults", {}).get("git_init")
+    if val is None:
+        return None
+    return bool(val)
+
+
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
