@@ -95,52 +95,44 @@ class Archetype:
     """A project archetype defining default optional folders.
 
     Attributes:
-        key: Machine-readable identifier (e.g. ``"analysis"``).
         label: Short human-readable label for the picker.
         description: One-line description shown alongside the label.
         folders: Subset of :data:`OPTIONAL_FOLDERS` enabled by default.
     """
 
-    key: str
     label: str
     description: str
     folders: list[str] = field(default_factory=list)
 
 
 #: Built-in archetypes shipped with ``datapm``.
+#: The dict key is the machine-readable identifier (e.g. ``"analysis"``).
 BUILT_IN_ARCHETYPES: dict[str, Archetype] = {
     "minimal": Archetype(
-        key="minimal",
         label="Minimal",
         description="communicatie, documenten",
-        folders=[],
     ),
     "analysis": Archetype(
-        key="analysis",
         label="Analysis",
         description="+ data, src, notebooks, resultaten",
         folders=["data", "src", "notebooks", "resultaten"],
     ),
     "modeling": Archetype(
-        key="modeling",
         label="Modeling",
         description="+ data, src, notebooks, resultaten, literatuur",
         folders=["data", "src", "notebooks", "literatuur", "resultaten"],
     ),
     "reporting": Archetype(
-        key="reporting",
         label="Reporting",
         description="+ data, src, queries, resultaten",
         folders=["data", "src", "queries", "resultaten"],
     ),
     "research": Archetype(
-        key="research",
         label="Research",
         description="+ data, src, notebooks, literatuur, resultaten",
         folders=["data", "src", "notebooks", "literatuur", "resultaten"],
     ),
     "full": Archetype(
-        key="full",
         label="Full",
         description="all folders",
         folders=list(OPTIONAL_FOLDERS),
