@@ -1,163 +1,259 @@
 # `datapm new` — Folder Selection UX Design
 
-## Context
+> **Status**: Final draft — ready for implementation  
+> **Milestone**: v0.2.0 (folder selection redesign)  
+> **Last updated**: 2026-04-08
 
-This document redesigns the interactive folder selection in `datapm new`. Currently the tool prompts yes/no for individual optional folders. The new design introduces **project archetypes** (presets) so the common case is one keystroke, while still allowing per-folder toggles.
+## 1. Context
 
-### Constraints from ARCHITECTURE.md / CLAUDE.md
+This document redesigns the interactive folder selection in `datapm new`.
+The current flow prompts for space-separated folder names. The new design
+introduces **project archetypes** (presets) so the common case takes a few
+keystrokes, while still allowing per-folder toggles.
 
-- Default folders (always created): `archief/`, `communicatie/`, `documenten/`
-- Optional folders: `data/`, `src/`, `literatuur/`, `resultaten/`, `notebooks/`
-- `data/` always includes `raw/`, `processed/`, `metadata/` — not independently toggleable
-- `src/` includes `queries/` (see Section F for discussion)
-- `resultaten/` includes `export/`, `figuren/`
-- Folder names default to Dutch, switchable to English via `preferences.folder_language` in config
+### Constraints
+
 - Core logic is stdlib-only; Rich/Typer is optional enhancement
 - Config lives in `~/.datapm/config.json`
+- Folder names default to Dutch, switchable via `preferences.folder_language`
+- Git lives inside `src/` (not the project root) — see Section 6
+- Projects may live in OneDrive-synced directories
 
 ---
 
-## A. Project Archetypes
+## 2. Folder Inventory
 
-Archetypes are presets that pre-check optional folders. The three default folders (`archief/`, `communicatie/`, `documenten/`) are always created regardless of archetype.
+### 2.1 Base folders (always created)
 
-| Archetype | Key | Optional Folders Included | Typical Use |
-|-----------|-----|--------------------------|-------------|
+| Folder | Role |
+|--------|------|
+| `communicatie/` | Emails, meeting notes, correspondence |
+| `documenten/` | **Input** artifacts — Word docs, Excel files, specs, briefs people send you |
+
+These two are created for every project, every archetype.
+
+### 2.2 `archief/` — never created at project start
+
+`archief/` is an **end-of-lifecycle** folder for completed or superseded
+files. Creating it at project start adds clutter. It is created later by:
+
+- `mkdir archief/` (manual)
+- A future `datapm archive <project>` command (post-v1)
+
+No archetype includes `archief/`.
+
+### 2.3 Optional folders
+
+| Folder | Role | Notes |
+|--------|------|-------|
+| `data/` | Data files | Always includes `raw/`, `processed/`, `metadata/` |
+| `src/` | Source code, scripts | Git repo root (see Section 6) |
+| `src/notebooks/` | Marimo / Jupyter notebooks | Toggleable; selecting it implies `src/` |
+| `src/queries/` | SQL files | Toggleable; selecting it implies `src/` |
+| `literatuur/` | Reference papers, articles, external reports | Background reading, not project-specific input |
+| `resultaten/` | **Output** artifacts | Always includes `export/`, `figuren/` |
+
+### 2.4 Folder role clarification
+
+The three "document" folders serve distinct roles:
+
+- **`documenten/`** = things other people give you for this project
+  (requirements, data dictionaries, Excel specs, Word briefs)
+- **`resultaten/`** = things you produce for others (dashboards, report
+  PDFs, export spreadsheets, generated figures)
+- **`literatuur/`** = reference material you read for context (academic
+  papers, methodology articles, industry reports — not project-specific
+  input)
+
+Decision rule: "Did someone send this to me for this project?" →
+`documenten/`. "Am I reading this for background?" → `literatuur/`.
+"Did I produce this?" → `resultaten/`.
+
+### 2.5 Subdirectory summary
+
+| Parent | Auto-created children | Independently toggleable? |
+|--------|-----------------------|--------------------------|
+| `data/` | `raw/`, `processed/`, `metadata/` | No — atomic |
+| `src/` | _(empty by default)_ | Yes — `notebooks/` and `queries/` are toggles |
+| `resultaten/` | `export/`, `figuren/` | No — atomic |
+
+### 2.6 Notebooks live inside `src/`
+
+Notebooks are source code. Since `src/` is the git boundary, notebooks
+belong under version control alongside scripts:
+
+```
+src/
+├── .git/
+├── .gitignore
+├── notebooks/        ← Marimo / Jupyter
+├── queries/          ← SQL files
+└── *.py              ← Python scripts
+```
+
+In the interactive UX, `notebooks` appears as a visible toggle. Selecting
+it implicitly enables `src/`. Toggling `src/` off also disables
+`notebooks` and `queries`.
+
+---
+
+## 3. Project Archetypes
+
+Archetypes pre-fill the folder toggles. Base folders (`communicatie/`,
+`documenten/`) are always created on top.
+
+| Archetype | Key | Optional Folders | Typical Use |
+|-----------|-----|------------------|-------------|
 | **Minimal** | `minimal` | _(none)_ | Quick ad-hoc question, no code or data |
-| **Analysis** | `analysis` | `data/`, `notebooks/` | Standard analytical work, exploration |
-| **Modeling** | `modeling` | `data/`, `src/`, `notebooks/`, `resultaten/` | ML/statistical modeling with deliverables |
-| **Reporting** | `reporting` | `data/`, `src/`, `resultaten/` | Recurring reports, dashboards |
-| **Research** | `research` | `data/`, `notebooks/`, `literatuur/`, `resultaten/` | Literature-heavy, write-up at end |
+| **Analysis** | `analysis` | `data`, `src`, `notebooks`, `resultaten` | Standard analytical work — **the default** |
+| **Modeling** | `modeling` | `data`, `src`, `notebooks`, `resultaten`, `literatuur` | ML / statistical modeling |
+| **Reporting** | `reporting` | `data`, `src`, `queries`, `resultaten` | Recurring reports, scheduled queries |
+| **Research** | `research` | `data`, `src`, `notebooks`, `literatuur`, `resultaten` | Literature-heavy, exploratory |
 | **Full** | `full` | _all optional folders_ | Large or uncertain scope |
 
 ### Design decisions
 
-- **`minimal` has zero optional folders** — for the quick "someone asked a question, I answered in 10 minutes" case. The base three folders handle filing emails and docs.
-- **`analysis` is the expected default** — most analytical work needs data + notebooks. No `src/` because ad-hoc analysis often stays in notebooks.
-- **`resultaten/` appears in archetypes that produce deliverables** — modeling, reporting, research. Not in `analysis` because exploratory work often doesn't produce a formal output.
-- **`literatuur/` only defaults on for `research`** — one toggle away for other types.
-- **`src/` appears in `modeling` and `reporting`** — where structured, reusable code is expected.
+- **`analysis` is the default.** Most analytical work needs data +
+  notebooks + results. `src/queries/` is off because not every analysis
+  uses standalone SQL files.
+- **`modeling` includes `literatuur/`** because ML work typically involves
+  reading papers about methods and benchmarks.
+- **`reporting` includes `queries/` but not `notebooks/`** because
+  reporting is typically scheduled SQL + scripts, not interactive
+  notebooks.
+- **`research` mirrors `modeling`** but without `queries/` — more
+  notebook-driven, less SQL-driven.
+- **All archetypes except `minimal` include `data/`, `src/`, and
+  `resultaten/`.** These are the backbone of any code-involving project.
+- **`archief/` is never in any archetype.**
+
+### Example: modeling project on disk
+
+```
+2026-04-08_Churn-Model/
+├── communicatie/
+├── documenten/           ← model requirements, evaluation criteria
+├── data/
+│   ├── raw/              ← source datasets
+│   ├── processed/        ← feature-engineered data, train/test splits
+│   └── metadata/         ← data dictionaries, schema docs
+├── src/
+│   ├── .git/
+│   ├── .gitignore
+│   ├── notebooks/        ← EDA, model iteration, evaluation
+│   └── *.py              ← training scripts, pipelines
+├── literatuur/           ← papers on methods, benchmark results
+├── resultaten/
+│   ├── export/           ← model predictions, scored datasets
+│   └── figuren/          ← ROC curves, feature importance, confusion matrices
+└── project.json
+```
+
+Model artifacts (`.pkl`, `.joblib`, saved weights) go in
+`data/processed/` for now. A dedicated `models/` subfolder can be added
+later if the pattern emerges.
 
 ---
 
-## B. Interactive UX Flow
+## 4. Interactive UX Flow
 
-### B.1 Happy path
+### 4.1 Happy path (Rich terminal)
 
 ```
 $ datapm new
 
 ? Project name: Churn analysis
-? Domain: marketing
+? Domain (optional): marketing
+? Description (optional): Q2 churn drivers for retail segment
 ? Project type:
-  ○ Minimal             (no optional folders)
-  ❯ Analysis            data, notebooks
-    Modeling             data, src, notebooks, resultaten
-    Reporting            data, src, resultaten
-    Research             data, notebooks, literatuur, resultaten
-    Full                 all optional folders
+  ○ Minimal             communicatie, documenten
+  ❯ Analysis            + data, src, notebooks, resultaten
+    Modeling             + data, src, notebooks, resultaten, literatuur
+    Reporting            + data, src, queries, resultaten
+    Research             + data, src, notebooks, literatuur, resultaten
+    Full                 all folders
 
-? Optional folders for "Churn analysis" (space to toggle, enter to confirm):
-  ✓ data/           raw + processed + metadata
-  ○ src/            source code + queries
-  ○ literatuur/     reference papers, documentation
-  ○ resultaten/     export + figuren
-  ✓ notebooks/      Jupyter notebooks
+? Folders (space to toggle, enter to confirm):
+  ✓ data/               raw + processed + metadata
+  ✓ src/                source code
+  ✓   src/notebooks/    Marimo / Jupyter notebooks
+  ○   src/queries/      SQL files
+  ○ literatuur/         reference papers, articles
+  ✓ resultaten/         export + figuren
 
-? Initialize git repo? [y/N]: n
+? Initialise git in src/? [y/N]: y
 
-✔ Created 2026-04-07_Churn-Analysis/ with 5 folders.
+✔ Created 2026-04-08_Churn-Analysis/ with 6 folders.
 ```
 
-Total interactions for the common case: type name → type domain → arrow+enter (archetype) → enter (accept defaults) → enter (no git) → done.
-
-### B.2 Step-by-step breakdown
+### 4.2 Plain terminal rendering (argparse fallback)
 
 ```
-Step 1: Name           Text input (or CLI argument)
-Step 2: Domain         Text input (or --domain flag)
-Step 3: Archetype      Single-select list
-Step 4: Toggle/confirm Multi-select checklist (pre-filled by archetype)
-Step 5: Git init       Yes/no (skipped if config has git_init set)
-Step 6: Done           Summary line + scaffold
+Project type:
+  [1] Minimal        (communicatie, documenten)
+  [2] Analysis       (+ data, src, notebooks, resultaten)
+  [3] Modeling       (+ data, src, notebooks, resultaten, literatuur)
+  [4] Reporting      (+ data, src, queries, resultaten)
+  [5] Research       (+ data, src, notebooks, literatuur, resultaten)
+  [6] Full           (all folders)
+Select [1-6, default=2]:
+
+Folders (enter numbers to toggle, Enter to confirm):
+  [1] ✓ data/
+  [2] ✓ src/
+  [3] ✓   notebooks/ (in src/)
+  [4]     queries/   (in src/)
+  [5]   literatuur/
+  [6] ✓ resultaten/
+Toggle [1-6] or Enter:
+
+Initialise git in src/? [y/N]:
 ```
 
-### B.3 Shortcut flags (zero-prompt mode)
+Accepts comma-separated numbers (`1,3`) or Enter to accept defaults.
+
+### 4.3 Shortcut flags (zero-prompt mode)
 
 ```bash
 # Archetype defaults, no prompts
 datapm new "Churn analysis" --domain marketing --type analysis
 
-# Archetype + add/remove specific folders
-datapm new "Churn analysis" --domain marketing --type analysis --add literatuur --remove notebooks
+# Add/remove from archetype
+datapm new "Churn analysis" --type analysis --add queries --remove notebooks
 
-# Explicit folder list (bypasses archetypes entirely)
-datapm new "Churn analysis" --domain marketing --folder data --folder notebooks
+# Explicit folder list (bypasses archetypes)
+datapm new "Churn analysis" --folder data --folder src --folder resultaten
 
 # With git
-datapm new "Churn analysis" --domain marketing --type modeling --git
+datapm new "Churn analysis" --type analysis --git
 
 # Custom template from config
-datapm new "Churn analysis" --domain marketing --template my-team-standard
+datapm new "Churn analysis" --template my-team-standard
 ```
 
-When `--type`, `--template`, or `--folder` is provided, skip the interactive archetype/toggle steps. When `--git` is provided, skip the git prompt.
+When `--type`, `--template`, or `--folder` is provided, skip the
+interactive archetype/toggle steps. When `--git` / `--no-git` is
+provided, skip the git prompt.
 
-### B.4 Plain terminal rendering (argparse fallback)
+### 4.4 Step-by-step breakdown
 
-No arrow keys, no ANSI — works over SSH, in minimal containers, everywhere:
-
-```
-Project type:
-  [1] Minimal        (no optional folders)
-  [2] Analysis       (data, notebooks)
-  [3] Modeling       (data, src, notebooks, resultaten)
-  [4] Reporting      (data, src, resultaten)
-  [5] Research       (data, notebooks, literatuur, resultaten)
-  [6] Full           (all optional folders)
-Select [1-6, default=2]: 2
-
-Optional folders (enter numbers to toggle, or press Enter to confirm):
-  [1] ✓ data/
-  [2]   src/
-  [3]   literatuur/
-  [4]   resultaten/
-  [5] ✓ notebooks/
-Toggle [1-5] or Enter to confirm:
-
-Initialize git repo? [y/N]:
-```
-
-Implementation: plain `input()` calls, zero dependencies. The toggle step accepts comma-separated numbers (`1,3`) or just Enter to accept.
-
-### B.5 Rich terminal rendering (Typer/InquirerPy)
-
-With the `[enhanced]` extra installed, use `InquirerPy` or `questionary` for arrow-key navigation and colored checkboxes. The archetype list shows a brief description on the right. The folder list uses space-to-toggle with visual checkmarks.
-
-Detection logic (already in `__main__.py`):
-
-```python
-try:
-    from data_project_manager.cli.app import app  # Typer path
-except ImportError:
-    from data_project_manager.cli.fallback import main  # argparse path
-```
-
-### B.6 Git init behavior
-
-- Prompted as a simple yes/no at the end of the flow
-- Skipped entirely if `defaults.git_init` is set in config (uses that value silently)
-- Overridden by `--git` / `--no-git` flags
-- When git init runs: creates `.gitignore` with just `data/` excluded
-- The `.gitignore` is intentionally minimal — just `data/` — since projects can be Python, R, Julia, or mixed. Language-specific ignores are the user's responsibility. A richer `.gitignore` generator is a post-v1 feature.
+| Step | Prompt | Skipped when |
+|------|--------|-------------|
+| 1 | Project name | Provided as CLI argument |
+| 2 | Domain (optional) | `--domain` flag |
+| 3 | Description (optional) | `--description` flag |
+| 4 | Archetype picker | `--type`, `--template`, or `--folder` |
+| 5 | Folder toggles | `--type` without `--add`/`--remove`, or `--folder` |
+| 6 | Git init | `--git`/`--no-git`, or `defaults.git_init` in config |
+| 7 | Done | _(always shown)_ |
 
 ---
 
-## C. Config Schema
+## 5. Config Schema
 
-All config changes fit within the existing `~/.datapm/config.json` structure from ARCHITECTURE.md.
+All changes fit within the existing `~/.datapm/config.json` structure.
 
-### C.1 Updated schema
+### 5.1 Updated schema
 
 ```json
 {
@@ -178,53 +274,52 @@ All config changes fit within the existing `~/.datapm/config.json` structure fro
   },
   "templates": {
     "my-team-standard": {
-      "description": "Our team's standard layout",
-      "folders": ["data", "src", "notebooks", "resultaten"]
-    },
-    "client-delivery": {
-      "description": "Client-facing deliverable project",
-      "folders": ["data", "src", "resultaten"]
+      "description": "Standard team layout",
+      "folders": ["data", "src", "notebooks", "queries", "resultaten"]
     }
   }
 }
 ```
 
-### C.2 Schema rules
+### 5.2 Schema rules
 
-**`defaults.template`** — which archetype is pre-selected in the picker. Accepts built-in keys (`minimal`, `analysis`, `modeling`, `reporting`, `research`, `full`) or custom template names. Default: `"analysis"`.
+**`defaults.template`** — pre-selected archetype in the picker. Accepts
+built-in keys (`minimal`, `analysis`, `modeling`, `reporting`, `research`,
+`full`) or custom template names. Default: `"analysis"`.
 
-**`templates.<name>.folders`** — required. List of optional folder keys: `data`, `src`, `literatuur`, `resultaten`, `notebooks`. The three base folders are always created and not listed here.
+**`defaults.git_init`** — when set, skips the git prompt and uses this
+value. When absent, the user is prompted.
 
-**`templates.<name>.description`** — optional. Shown next to the template name in the interactive picker.
+**`templates.<name>.folders`** — required. List of optional folder keys:
+`data`, `src`, `notebooks`, `queries`, `literatuur`, `resultaten`. Keys
+`notebooks` and `queries` are `src/` children — including either one
+implicitly includes `src/`.
 
-**`preferences.folder_language`** — `"nl"` (default) or `"en"`. Controls folder names on disk:
+**`templates.<name>.description`** — optional. Shown in the picker.
 
-| Key | Dutch (nl) | English (en) |
-|-----|-----------|-------------|
-| _base_ | `archief/` | `archive/` |
+**`preferences.folder_language`** — `"nl"` (default) or `"en"`:
+
+| Key | Dutch (`nl`) | English (`en`) |
+|-----|-------------|---------------|
 | _base_ | `communicatie/` | `communication/` |
 | _base_ | `documenten/` | `documents/` |
+| _archive_ | `archief/` | `archive/` |
 | `data` | `data/` | `data/` |
 | `src` | `src/` | `src/` |
+| `notebooks` | `src/notebooks/` | `src/notebooks/` |
+| `queries` | `src/queries/` | `src/queries/` |
 | `literatuur` | `literatuur/` | `literature/` |
 | `resultaten` | `resultaten/` | `results/` |
-| `notebooks` | `notebooks/` | `notebooks/` |
 
-Subfolder names also translate: `figuren/` → `figures/`, `export/` stays `export/`.
+Subfolder names also translate: `figuren/` → `figures/`.
 
-The folder *keys* in archetypes and config are always the Dutch names (canonical). The language preference only affects what gets created on disk. This means `--folder literatuur` and `--add literatuur` work regardless of language setting.
+Folder **keys** in archetypes, config, and CLI flags are always the Dutch
+names (canonical). The language setting only affects what is created on
+disk. `--folder literatuur` works regardless of language setting.
 
-### C.3 Merge / override order
+### 5.3 Custom templates in picker
 
-```
-Built-in archetypes (hardcoded in core/templates.py)
-  ↓ extended by
-~/.datapm/config.json  → templates section
-  ↓ overridden by
-CLI flags (--type, --template, --folder, --add, --remove)
-```
-
-Custom templates appear in the picker below built-in archetypes:
+Custom templates from config appear below built-in archetypes:
 
 ```
 ? Project type:
@@ -235,128 +330,248 @@ Custom templates appear in the picker below built-in archetypes:
     Research
     Full
     ──────────────
-    my-team-standard    Our team's standard layout
-    client-delivery     Client-facing deliverable project
+    my-team-standard    Standard team layout
 ```
 
-### C.4 Programmatic representation
+### 5.4 Override order
+
+```
+Built-in archetypes (hardcoded in core/templates.py)
+  ↓ extended by
+~/.datapm/config.json → templates section
+  ↓ overridden by
+CLI flags (--type, --template, --folder, --add, --remove)
+```
+
+---
+
+## 6. Git Initialisation
+
+### 6.1 Git lives in `src/`
+
+The project root often lives in a OneDrive-synced directory. OneDrive
+and git conflict — OneDrive syncs `.git/` internals during operations,
+causing lock conflicts and corrupted pack files. Placing git inside
+`src/` solves this:
+
+- **OneDrive** syncs the whole project folder. `src/` (or just
+  `src/.git/`) is excluded from OneDrive sync (one-time per-project
+  setting).
+- **Git** only tracks source code — notebooks, queries, scripts.
+- **No conflict** — each system owns its own files.
+
+Colleagues access `documenten/`, `resultaten/`, `communicatie/` via
+OneDrive. They never need to touch `src/`.
+
+```
+2026-04-08_Churn-Analysis/          ← OneDrive-synced
+├── communicatie/                    ← synced
+├── documenten/                     ← synced
+├── data/                           ← synced
+├── resultaten/                     ← synced
+├── src/                            ← excluded from OneDrive
+│   ├── .git/
+│   ├── .gitignore
+│   ├── notebooks/
+│   └── *.py
+└── project.json                    ← synced
+```
+
+### 6.2 `.gitignore` content
+
+Minimal and language-agnostic. Users add their own patterns:
+
+```gitignore
+# datapm default — add language-specific patterns as needed
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+```
+
+### 6.3 Behaviour
+
+- Prompted: "Initialise git in src/?" (yes/no)
+- Skipped if `defaults.git_init` is set in config
+- Overridden by `--git` / `--no-git` flags
+- Requires `src/` to be selected — if `src/` is off, git prompt is
+  skipped entirely
+- Sets `has_git_repo` on the Project DB record
+
+### 6.4 Editor configuration note
+
+Since `.git/` lives in `src/` rather than the project root, editors
+that walk up the tree for `.git/` (nvim, VS Code) will only find the
+repo when working within `src/`. When coding, open your editor rooted
+at `src/`. For project-wide file browsing, use your file manager or
+a separate terminal.
+
+A future `datapm` enhancement could generate a workspace config file
+(`.nvim.lua`, `.vscode/settings.json`) that points to `src/.git/`.
+This is post-v1.
+
+---
+
+## 7. Programmatic Representation
 
 ```python
 # core/templates.py — stdlib only
 
 from dataclasses import dataclass
 
-FOLDER_NAMES = {
+FOLDER_NAMES: dict[str, dict[str, str]] = {
     "nl": {
-        "archief": "archief",
         "communicatie": "communicatie",
         "documenten": "documenten",
+        "archief": "archief",
         "data": "data",
         "src": "src",
         "literatuur": "literatuur",
         "resultaten": "resultaten",
-        "notebooks": "notebooks",
     },
     "en": {
-        "archief": "archive",
         "communicatie": "communication",
         "documenten": "documents",
+        "archief": "archive",
         "data": "data",
         "src": "src",
         "literatuur": "literature",
         "resultaten": "results",
-        "notebooks": "notebooks",
     },
 }
 
-SUBFOLDER_NAMES = {
-    "nl": {"raw": "raw", "processed": "processed", "metadata": "metadata",
-           "queries": "queries", "export": "export", "figuren": "figuren"},
-    "en": {"raw": "raw", "processed": "processed", "metadata": "metadata",
-           "queries": "queries", "export": "export", "figuren": "figures"},
+SUBFOLDER_NAMES: dict[str, dict[str, str]] = {
+    "nl": {
+        "raw": "raw",
+        "processed": "processed",
+        "metadata": "metadata",
+        "queries": "queries",
+        "notebooks": "notebooks",
+        "export": "export",
+        "figuren": "figuren",
+    },
+    "en": {
+        "raw": "raw",
+        "processed": "processed",
+        "metadata": "metadata",
+        "queries": "queries",
+        "notebooks": "notebooks",
+        "export": "export",
+        "figuren": "figures",
+    },
 }
 
-# Subfolders created automatically when a parent is included
-SUBFOLDERS = {
+# Auto-created when parent is selected (not independently toggleable)
+SUBFOLDERS: dict[str, list[str]] = {
     "data": ["raw", "processed", "metadata"],
-    "src": ["queries"],
     "resultaten": ["export", "figuren"],
 }
 
-BASE_FOLDERS = ["archief", "communicatie", "documenten"]
-OPTIONAL_FOLDERS = ["data", "src", "literatuur", "resultaten", "notebooks"]
+# src/ sub-items that ARE independently toggleable
+SRC_TOGGLES: list[str] = ["notebooks", "queries"]
+
+BASE_FOLDERS: list[str] = ["communicatie", "documenten"]
+
+OPTIONAL_FOLDERS: list[str] = [
+    "data", "src", "notebooks", "queries", "literatuur", "resultaten",
+]
+# "notebooks" and "queries" are src/ children but listed as top-level
+# toggles for UX. Selecting either implies src/.
 
 
 @dataclass
 class Archetype:
+    """A project archetype defining default optional folders."""
+
     key: str
     description: str
     folders: list[str]  # subset of OPTIONAL_FOLDERS
 
 
 BUILT_IN_ARCHETYPES: dict[str, Archetype] = {
-    "minimal":   Archetype("minimal",   "no optional folders", []),
-    "analysis":  Archetype("analysis",  "data, notebooks",
-                           ["data", "notebooks"]),
-    "modeling":  Archetype("modeling",  "data, src, notebooks, resultaten",
-                           ["data", "src", "notebooks", "resultaten"]),
-    "reporting": Archetype("reporting", "data, src, resultaten",
-                           ["data", "src", "resultaten"]),
-    "research":  Archetype("research",  "data, notebooks, literatuur, resultaten",
-                           ["data", "notebooks", "literatuur", "resultaten"]),
-    "full":      Archetype("full",      "all optional folders",
-                           OPTIONAL_FOLDERS.copy()),
+    "minimal": Archetype(
+        "minimal",
+        "communicatie, documenten",
+        [],
+    ),
+    "analysis": Archetype(
+        "analysis",
+        "+ data, src, notebooks, resultaten",
+        ["data", "src", "notebooks", "resultaten"],
+    ),
+    "modeling": Archetype(
+        "modeling",
+        "+ data, src, notebooks, resultaten, literatuur",
+        ["data", "src", "notebooks", "literatuur", "resultaten"],
+    ),
+    "reporting": Archetype(
+        "reporting",
+        "+ data, src, queries, resultaten",
+        ["data", "src", "queries", "resultaten"],
+    ),
+    "research": Archetype(
+        "research",
+        "+ data, src, notebooks, literatuur, resultaten",
+        ["data", "src", "notebooks", "literatuur", "resultaten"],
+    ),
+    "full": Archetype(
+        "full",
+        "all folders",
+        OPTIONAL_FOLDERS.copy(),
+    ),
 }
 ```
 
 ---
 
-## D. Implementation Notes
+## 8. Implementation Notes
 
-### Where this fits in the codebase
+### Files to create or modify
 
-| File | Responsibility |
-|------|---------------|
-| `core/templates.py` | Archetype definitions, folder name mappings, `SUBFOLDERS` — **new file** |
-| `core/project.py` | `create_project()` reads selected archetype + toggles, calls `_scaffold_folders()` |
-| `config/loader.py` | Loads custom templates from `config.json`, merges with built-ins |
-| `cli/fallback.py` | Argparse: `--type`, `--folder`, `--add`, `--remove`, `--git` flags + numbered-menu interactive flow |
-| `cli/app.py` | Typer: same flags, Rich-formatted picker and toggle list |
+| File | Change |
+|------|--------|
+| `core/templates.py` | **New** — archetype definitions, folder/subfolder mappings (Section 7) |
+| `core/project.py` | Update `create_project()` to accept archetype key + toggle overrides; update `_scaffold_folders()` to use template system |
+| `config/loader.py` | Load custom templates from config, merge with built-ins |
+| `cli/fallback.py` | Add `--type`, `--add`, `--remove`, `--git`/`--no-git` flags; numbered-menu interactive flow |
+| `cli/app.py` | Rich-formatted archetype picker + folder toggle list |
 
-### Milestone alignment
+### Toggle dependencies
 
-This work fits into **Milestone 1 (v0.1.0), PR #4 (`feat/project-creation`)**. The archetype system replaces the current per-folder yes/no prompts. Custom templates in config can land in the same PR or be split into a small follow-up.
-
----
-
-## E. Migration from Current Behavior
-
-The old flow (auto-create base folders, yes/no for each optional folder) maps to choosing an archetype and then toggling. Users who always picked the same set of folders can set `defaults.template` in config and skip the picker entirely with `--type`.
-
-No breaking change to the folder structure on disk — the same folders are created, just selected differently.
+```
+notebooks ON  → src ON (implicit)
+queries ON    → src ON (implicit)
+src OFF       → notebooks OFF, queries OFF (forced)
+git init      → requires src ON (else skipped)
+```
 
 ---
 
-## F. Open Questions
+## 9. Migration from Current Behaviour
 
-### `src/queries/` — keep or rethink?
+The current flow (space-separated folder names) maps to choosing an
+archetype and optionally toggling folders. Changes visible to the user:
 
-Currently `src/` auto-creates `queries/`. This works for SQL-heavy projects, but for Python/R modeling projects the query files often live alongside other source code. Options:
+- **`archief/` is no longer auto-created** — the only breaking change.
+  Existing projects are unaffected.
+- **`notebooks/` moves from top-level to `src/notebooks/`** — new
+  projects only. Existing projects keep their structure.
+- **Interactive flow changes** from free-text folder input to
+  archetype picker + toggles.
 
-1. **Keep as-is** — `src/queries/` is created when `src/` is selected. Simple, no harm if unused.
-2. **Drop the subdirectory** — just create `src/`. Users `mkdir queries` if needed.
-3. **Make it configurable** — add a `subfolders` override in custom templates.
+---
 
-Recommendation: **option 1** for v0.1.0. The subdirectory costs nothing and is easy to remove. Revisit if it feels wrong in practice.
+## 10. Future Work (post-v1)
 
-### Language default
+These are noted here for context but are **not in scope** for v0.1.0:
 
-Current design defaults to Dutch (`"nl"`). This matches the existing codebase. English is one config change away. No per-project language override for v0.1.0 — a global switch covers the 99% case.
-
-### Default archetype
-
-The design defaults to `analysis`. Should this be `minimal` instead to match the "fast deployment" philosophy? The difference is one arrow-key press, so impact is small. Setting `defaults.template` in config resolves this per-user.
-
-### `.gitignore` scope
-
-Current design: when git init runs, create a `.gitignore` containing only `data/`. This prevents accidentally committing large data files while staying language-agnostic. A richer `.gitignore` generator (Python-specific, R-specific, etc.) is a post-v1 feature — for now, users add their own patterns.
+- **`datapm archive <project>`** — creates `archief/`, moves specified
+  files, sets status to `archived`
+- **`datapm sync <project>`** — copies `src/` (without `.git/`) to the
+  OneDrive project folder as a snapshot, so colleagues can see code
+  without git access
+- **Editor workspace generation** — `datapm init-editor` creates
+  `.nvim.lua` or `.vscode/settings.json` pointing to `src/.git/`
+- **Rich `.gitignore` generator** — language-specific patterns (Python,
+  R, Julia) based on project contents
+- **`models/` subfolder** — for ML projects with significant model
+  artifacts; add as a `data/` or `src/` child once the pattern is clear
