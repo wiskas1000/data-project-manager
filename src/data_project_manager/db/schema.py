@@ -10,12 +10,14 @@ Migration history
 - **2** — Remaining 14 tables: Person, Tag, DataFile, Query, Deliverable,
   RequestQuestion, ChangeLog, EntityType, AggregationLevel, and all
   junction tables (v0.2.0)
+- **3** — FTS5 virtual table for full-text project search, with triggers
+  to keep it in sync (v0.3.0)
 """
 
 import sqlite3
 
 #: The schema version this codebase expects.  Bump when adding a migration.
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 # ---------------------------------------------------------------------------
 # DDL statements grouped by migration version
@@ -244,6 +246,65 @@ MIGRATIONS: dict[int, list[str]] = {
             ('al-quarterly', 'quarterly'),
             ('al-yearly', 'yearly'),
             ('al-summary', 'summary')
+        """,
+    ],
+    3: [
+        # ---------------------------------------------------------------
+        # FTS5 virtual table for full-text project search
+        # ---------------------------------------------------------------
+        """
+        CREATE VIRTUAL TABLE IF NOT EXISTS project_fts USING fts5(
+            project_id UNINDEXED,
+            title,
+            description,
+            slug,
+            domain
+        )
+        """,
+        # Populate FTS with existing projects
+        """
+        INSERT INTO project_fts (project_id, title, description, slug, domain)
+        SELECT id, title, COALESCE(description, ''), slug, COALESCE(domain, '')
+        FROM project
+        """,
+        # Keep FTS in sync: INSERT
+        """
+        CREATE TRIGGER IF NOT EXISTS project_fts_insert
+        AFTER INSERT ON project
+        BEGIN
+            INSERT INTO project_fts (project_id, title, description, slug, domain)
+            VALUES (
+                NEW.id,
+                NEW.title,
+                COALESCE(NEW.description, ''),
+                NEW.slug,
+                COALESCE(NEW.domain, '')
+            );
+        END
+        """,
+        # Keep FTS in sync: UPDATE
+        """
+        CREATE TRIGGER IF NOT EXISTS project_fts_update
+        AFTER UPDATE ON project
+        BEGIN
+            DELETE FROM project_fts WHERE project_id = OLD.id;
+            INSERT INTO project_fts (project_id, title, description, slug, domain)
+            VALUES (
+                NEW.id,
+                NEW.title,
+                COALESCE(NEW.description, ''),
+                NEW.slug,
+                COALESCE(NEW.domain, '')
+            );
+        END
+        """,
+        # Keep FTS in sync: DELETE
+        """
+        CREATE TRIGGER IF NOT EXISTS project_fts_delete
+        AFTER DELETE ON project
+        BEGIN
+            DELETE FROM project_fts WHERE project_id = OLD.id;
+        END
         """,
     ],
 }

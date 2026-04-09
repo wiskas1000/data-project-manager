@@ -42,8 +42,8 @@ def test_migrate_creates_project_root_table() -> None:
     assert row is not None
 
 
-def test_schema_version_is_2() -> None:
-    assert SCHEMA_VERSION == 2
+def test_schema_version_is_3() -> None:
+    assert SCHEMA_VERSION == 3
 
 
 _MIGRATION_2_TABLES = [
