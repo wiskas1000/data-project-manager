@@ -127,6 +127,20 @@ def main() -> None:
         help="Only projects created on or before this ISO date",
     )
 
+    # export
+    export_parser = subparsers.add_parser(
+        "export", help="Export project metadata as JSON"
+    )
+    export_parser.add_argument(
+        "slug", nargs="?", help="Project slug (omit for full index)"
+    )
+    export_parser.add_argument(
+        "--all",
+        dest="export_all",
+        action="store_true",
+        help="Export all projects",
+    )
+
     # config
     config_parser = subparsers.add_parser("config", help="Manage configuration")
     config_sub = config_parser.add_subparsers(dest="config_command")
@@ -153,6 +167,8 @@ def main() -> None:
         _handle_project(args, project_parser)
     elif args.command == "search":
         _handle_search(args)
+    elif args.command == "export":
+        _handle_export(args)
     elif args.command == "config":
         _handle_config(args, config_parser)
 
@@ -311,6 +327,20 @@ def _handle_search(args: argparse.Namespace) -> None:
     print("-" * len(header))
     for r in results:
         print(f"{r.slug:<{col_slug}}  {r.status:<{col_status}}  {r.title}")
+
+
+def _handle_export(args: argparse.Namespace) -> None:
+    """Export project metadata as JSON."""
+    from data_project_manager.core.export import export_all_json, export_project_json
+
+    if args.export_all or args.slug is None:
+        print(export_all_json())
+    else:
+        output = export_project_json(args.slug)
+        if output is None:
+            print(f"Error: project '{args.slug}' not found.", file=sys.stderr)
+            sys.exit(1)
+        print(output)
 
 
 def _handle_info(args: argparse.Namespace) -> None:

@@ -473,6 +473,36 @@ def search(
 
 
 # ---------------------------------------------------------------------------
+# export
+# ---------------------------------------------------------------------------
+
+
+@app.command()
+def export(
+    slug: Annotated[
+        str | None, typer.Argument(help="Project slug (omit for full index)")
+    ] = None,
+    export_all: Annotated[
+        bool, typer.Option("--all", help="Export all projects")
+    ] = False,
+) -> None:
+    """Export project metadata as structured JSON."""
+    from rich.syntax import Syntax
+
+    from data_project_manager.core.export import export_all_json, export_project_json
+
+    if export_all or slug is None:
+        output = export_all_json()
+    else:
+        output = export_project_json(slug)
+        if output is None:
+            _err_console.print(f"[bold red]Error:[/] project '{slug}' not found.")
+            raise typer.Exit(1)
+
+    _console.print(Syntax(output, "json", theme="monokai"))
+
+
+# ---------------------------------------------------------------------------
 # config
 # ---------------------------------------------------------------------------
 
