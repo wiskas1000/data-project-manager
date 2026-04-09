@@ -7,6 +7,25 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.3.0] — 2026-04-09
+
+### Added
+
+- **FTS5 full-text search**: schema migration 3 adds a `project_fts` virtual
+  table with INSERT/UPDATE/DELETE triggers to keep it in sync.
+- **`datapm search`**: find projects by free text (title, description, slug,
+  domain) and structured filters (`--domain`, `--status`, `--tag`,
+  `--from`/`--to` date range). All filters are combinable.
+- **`datapm export`**: export a single project or the full index as structured
+  JSON, including tags, people, data files, deliverables, and questions.
+  Flags: `--all`, `--output/-o` (write to file), `--compact` (minified).
+- **SearchResult** frozen dataclass in `db/models/search.py`.
+- Enhanced Typer CLI: Rich tables with description snippets for search,
+  syntax-highlighted JSON for export.
+- 50 new tests (search engine, search CLI, export, export CLI).
+
+---
+
 ## [0.2.1] — 2026-04-09
 
 ### Changed

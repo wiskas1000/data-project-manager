@@ -126,19 +126,21 @@ Unit tests for every repository class: CRUD operations, M:N junction management,
 
 ---
 
-## Milestone 3: Search & Export — `v0.3.0`
+## Milestone 3: Search & Export — `v0.3.0` ✅
 
 **Summary**: Find projects across the entire history. Export structured JSON for LLM context or downstream tools. This is where the database pays off.
 
+**Status**: Released and tagged. 4 PRs merged (#33–#36).
+
 ### Acceptance Criteria
 
-- [ ] `python -m data_project_manager search "churn"` finds projects by title, description, tags, domain
-- [ ] `python -m data_project_manager search --domain healthcare --status done` filters correctly
-- [ ] `python -m data_project_manager search --tag logistic-regression` works
-- [ ] `python -m data_project_manager export <project-slug>` outputs clean JSON with all metadata and relationships
-- [ ] `python -m data_project_manager export --all` outputs index of all projects
-- [ ] JSON export includes related persons, tags, data files, deliverables (whatever exists)
-- [ ] Enhanced CLI: Rich tables for search results, syntax-highlighted JSON for export
+- [x] `python -m data_project_manager search "churn"` finds projects by title, description, tags, domain
+- [x] `python -m data_project_manager search --domain healthcare --status done` filters correctly
+- [x] `python -m data_project_manager search --tag logistic-regression` works
+- [x] `python -m data_project_manager export <project-slug>` outputs clean JSON with all metadata and relationships
+- [x] `python -m data_project_manager export --all` outputs index of all projects
+- [x] JSON export includes related persons, tags, data files, deliverables (whatever exists)
+- [x] Enhanced CLI: Rich tables for search results, syntax-highlighted JSON for export
 
 ### Testing Strategy
 
@@ -192,7 +194,7 @@ Coverage sweep, edge cases (Unicode slugs, long paths, empty DB), cross-platform
 | Launcher | v0.1.0 | 6 ✅ | `datapm new`, config, DB foundation |
 | Full Schema & Library API | v0.2.0 | 8 ✅ | All 16 tables, repository classes, folder selection redesign, v0.1.0 fixes |
 | Typed Data Model | v0.2.1 | 1 ✅ | Frozen dataclasses for all entities |
-| Search & Export | v0.3.0 | 4 | FTS5 search, JSON export, AI readiness |
+| Search & Export | v0.3.0 | 4 ✅ | FTS5 search, JSON export, AI readiness |
 | Docs & v1 Release | v1.0.0 | 4 | Documentation, coverage, stability |
 | **Total** | | **23** | |
 
