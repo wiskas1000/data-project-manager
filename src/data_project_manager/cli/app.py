@@ -211,10 +211,10 @@ def list_cmd(
 
     for p in projects:
         table.add_row(
-            p["slug"],
-            _status_text(p["status"]),
-            p.get("domain") or "",
-            p["title"],
+            p.slug,
+            _status_text(p.status),
+            p.domain or "",
+            p.title,
         )
 
     _console.print(table)
@@ -243,7 +243,7 @@ def info(
             _err_console.print(f"[bold red]Error:[/] project '{slug}' not found.")
             raise typer.Exit(1)
 
-        pid = project["id"]
+        pid = project.id
         tags = ProjectTagRepository(conn).list_for_project(pid)
         people = ProjectPersonRepository(conn).list_for_project(pid)
         log = ChangeLogRepository(conn).list_for_entity("project", pid)
@@ -254,19 +254,19 @@ def info(
         table.add_column()
 
         field_rows = [
-            ("Slug", project["slug"]),
-            ("Status", _status_text(project["status"])),
-            ("Domain", project.get("domain") or ""),
-            ("Description", project.get("description") or ""),
-            ("Template", project.get("template_used") or ""),
-            ("Git", "yes" if project.get("has_git_repo") else "no"),
-            ("Path", project.get("relative_path") or ""),
-            ("Request date", project.get("request_date") or ""),
-            ("Expected start", project.get("expected_start") or ""),
-            ("Expected end", project.get("expected_end") or ""),
-            ("Realized start", project.get("realized_start") or ""),
-            ("Realized end", project.get("realized_end") or ""),
-            ("Est. hours", str(project.get("estimated_hours") or "")),
+            ("Slug", project.slug),
+            ("Status", _status_text(project.status)),
+            ("Domain", project.domain or ""),
+            ("Description", project.description or ""),
+            ("Template", project.template_used or ""),
+            ("Git", "yes" if project.has_git_repo else "no"),
+            ("Path", project.relative_path or ""),
+            ("Request date", project.request_date or ""),
+            ("Expected start", project.expected_start or ""),
+            ("Expected end", project.expected_end or ""),
+            ("Realized start", project.realized_start or ""),
+            ("Realized end", project.realized_end or ""),
+            ("Est. hours", str(project.estimated_hours or "")),
         ]
         for label, value in field_rows:
             if value and str(value):
@@ -275,31 +275,31 @@ def info(
         _console.print(
             Panel(
                 table,
-                title=f"[bold]{project['title']}[/]",
+                title=f"[bold]{project.title}[/]",
                 expand=False,
             )
         )
 
         # Tags
         if tags:
-            tag_names = ", ".join(f"[cyan]{t['name']}[/]" for t in tags)
+            tag_names = ", ".join(f"[cyan]{t.name}[/]" for t in tags)
             _console.print(f"[dim]Tags:[/] {tag_names}")
 
         # People
         if people:
             _console.print("[dim]People:[/]")
             for p in people:
-                full = f"{p['first_name']} {p['last_name']}"
-                _console.print(f"  {full:<24} [dim]{p['role']}[/]")
+                full = f"{p.first_name} {p.last_name}"
+                _console.print(f"  {full:<24} [dim]{p.role}[/]")
 
         # Change log
         if log:
             _console.print("[dim]Change log (last 5):[/]")
             for entry in log[-5:]:
-                ts = entry["changed_at"][:19]
-                field = entry["field_name"]
-                old = entry["old_value"] or "[dim]—[/]"
-                new = entry["new_value"] or "[dim]—[/]"
+                ts = entry.changed_at[:19]
+                field = entry.field_name
+                old = entry.old_value or "[dim]—[/]"
+                new = entry.new_value or "[dim]—[/]"
                 _console.print(f"  [dim]{ts}[/]  {field:<16}  {old} → {new}")
     finally:
         conn.close()
@@ -351,7 +351,7 @@ def project_update(
             _err_console.print(f"[bold red]Error:[/] project '{slug}' not found.")
             raise typer.Exit(1)
 
-        pid = project["id"]
+        pid = project.id
 
         # Validate and collect scalar updates
         updates: dict = {}
@@ -379,11 +379,11 @@ def project_update(
         pt_repo = ProjectTagRepository(conn)
         for name in tags or []:
             tag = tag_repo.create(name=name)
-            pt_repo.add(project_id=pid, tag_id=tag["id"])
+            pt_repo.add(project_id=pid, tag_id=tag.id)
         for name in remove_tags or []:
             tag = tag_repo.get_by_name(name)
             if tag:
-                pt_repo.remove(project_id=pid, tag_id=tag["id"])
+                pt_repo.remove(project_id=pid, tag_id=tag.id)
 
         if not updates and not tags and not remove_tags:
             _console.print("[dim]Nothing to update.[/]")
@@ -391,7 +391,7 @@ def project_update(
 
         _console.print(f"[bold green]✓[/] Updated [cyan]{slug}[/]")
         for key, new_val in updates.items():
-            old_val = project[key]
+            old_val = getattr(project, key)
             _console.print(f"  [dim]{key}:[/] {old_val} → [bold]{new_val}[/]")
         for name in tags or []:
             _console.print(f"  [dim]tag added:[/] [cyan]{name}[/]")

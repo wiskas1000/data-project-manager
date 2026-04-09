@@ -58,11 +58,11 @@ class TestProjectUpdate:
         project = make_project(conn)
         conn.close()
 
-        _handle_project_update(_update_args(project["slug"], status="done"))
+        _handle_project_update(_update_args(project.slug, status="done"))
 
         conn2 = get_connection(db_path)
-        updated = ProjectRepository(conn2).get_by_slug(project["slug"])
-        assert updated["status"] == "done"
+        updated = ProjectRepository(conn2).get_by_slug(project.slug)
+        assert updated.status == "done"
         conn2.close()
 
     def test_update_domain(self, tmp_path, monkeypatch) -> None:
@@ -71,11 +71,11 @@ class TestProjectUpdate:
         project = make_project(conn)
         conn.close()
 
-        _handle_project_update(_update_args(project["slug"], domain="healthcare"))
+        _handle_project_update(_update_args(project.slug, domain="healthcare"))
 
         conn2 = get_connection(db_path)
-        updated = ProjectRepository(conn2).get_by_slug(project["slug"])
-        assert updated["domain"] == "healthcare"
+        updated = ProjectRepository(conn2).get_by_slug(project.slug)
+        assert updated.domain == "healthcare"
         conn2.close()
 
     def test_update_description(self, tmp_path, monkeypatch) -> None:
@@ -85,12 +85,12 @@ class TestProjectUpdate:
         conn.close()
 
         _handle_project_update(
-            _update_args(project["slug"], description="New description")
+            _update_args(project.slug, description="New description")
         )
 
         conn2 = get_connection(db_path)
-        updated = ProjectRepository(conn2).get_by_slug(project["slug"])
-        assert updated["description"] == "New description"
+        updated = ProjectRepository(conn2).get_by_slug(project.slug)
+        assert updated.description == "New description"
         conn2.close()
 
     def test_update_nothing_prints_message(self, tmp_path, monkeypatch, capsys) -> None:
@@ -99,7 +99,7 @@ class TestProjectUpdate:
         project = make_project(conn)
         conn.close()
 
-        _handle_project_update(_update_args(project["slug"]))
+        _handle_project_update(_update_args(project.slug))
         captured = capsys.readouterr()
         assert "Nothing to update" in captured.out
 
@@ -112,7 +112,7 @@ class TestProjectUpdate:
         conn.close()
 
         with pytest.raises(SystemExit):
-            _handle_project_update(_update_args(project["slug"], status="invalid"))
+            _handle_project_update(_update_args(project.slug, status="invalid"))
 
     def test_update_missing_slug_exits(self, tmp_path, monkeypatch) -> None:
         import pytest
@@ -130,11 +130,11 @@ class TestProjectUpdate:
         project = make_project(conn)
         conn.close()
 
-        _handle_project_update(_update_args(project["slug"], tags=["ml", "churn"]))
+        _handle_project_update(_update_args(project.slug, tags=["ml", "churn"]))
 
         conn2 = get_connection(db_path)
-        tags = ProjectTagRepository(conn2).list_for_project(project["id"])
-        assert {t["name"] for t in tags} == {"ml", "churn"}
+        tags = ProjectTagRepository(conn2).list_for_project(project.id)
+        assert {t.name for t in tags} == {"ml", "churn"}
         conn2.close()
 
     def test_remove_tag(self, tmp_path, monkeypatch) -> None:
@@ -143,11 +143,11 @@ class TestProjectUpdate:
         project = make_project(conn)
         conn.close()
 
-        _handle_project_update(_update_args(project["slug"], tags=["ml"]))
-        _handle_project_update(_update_args(project["slug"], remove_tags=["ml"]))
+        _handle_project_update(_update_args(project.slug, tags=["ml"]))
+        _handle_project_update(_update_args(project.slug, remove_tags=["ml"]))
 
         conn2 = get_connection(db_path)
-        tags = ProjectTagRepository(conn2).list_for_project(project["id"])
+        tags = ProjectTagRepository(conn2).list_for_project(project.id)
         assert tags == []
         conn2.close()
 
@@ -157,11 +157,11 @@ class TestProjectUpdate:
         project = make_project(conn)
         conn.close()
 
-        _handle_project_update(_update_args(project["slug"], status="done"))
+        _handle_project_update(_update_args(project.slug, status="done"))
 
         conn2 = get_connection(db_path)
-        log = ChangeLogRepository(conn2).list_for_entity("project", project["id"])
-        assert any(e["field_name"] == "status" for e in log)
+        log = ChangeLogRepository(conn2).list_for_entity("project", project.id)
+        assert any(e.field_name == "status" for e in log)
         conn2.close()
 
     def test_update_prints_summary(self, tmp_path, monkeypatch, capsys) -> None:
@@ -170,7 +170,7 @@ class TestProjectUpdate:
         project = make_project(conn)
         conn.close()
 
-        _handle_project_update(_update_args(project["slug"], status="paused"))
+        _handle_project_update(_update_args(project.slug, status="paused"))
         out = capsys.readouterr().out
         assert "Updated" in out
         assert "status" in out
@@ -188,10 +188,10 @@ class TestInfo:
         project = make_project(conn, "My Analysis")
         conn.close()
 
-        _handle_info(_info_args(project["slug"]))
+        _handle_info(_info_args(project.slug))
         out = capsys.readouterr().out
         assert "My Analysis" in out
-        assert project["slug"] in out
+        assert project.slug in out
 
     def test_info_shows_status(self, tmp_path, monkeypatch, capsys) -> None:
         db_path = _patch_conn(monkeypatch, tmp_path)
@@ -199,7 +199,7 @@ class TestInfo:
         project = make_project(conn)
         conn.close()
 
-        _handle_info(_info_args(project["slug"]))
+        _handle_info(_info_args(project.slug))
         assert "active" in capsys.readouterr().out
 
     def test_info_shows_tags(self, tmp_path, monkeypatch, capsys) -> None:
@@ -208,8 +208,8 @@ class TestInfo:
         project = make_project(conn)
         conn.close()
 
-        _handle_project_update(_update_args(project["slug"], tags=["ml"]))
-        _handle_info(_info_args(project["slug"]))
+        _handle_project_update(_update_args(project.slug, tags=["ml"]))
+        _handle_info(_info_args(project.slug))
         assert "ml" in capsys.readouterr().out
 
     def test_info_shows_changelog(self, tmp_path, monkeypatch, capsys) -> None:
@@ -218,8 +218,8 @@ class TestInfo:
         project = make_project(conn)
         conn.close()
 
-        _handle_project_update(_update_args(project["slug"], status="done"))
-        _handle_info(_info_args(project["slug"]))
+        _handle_project_update(_update_args(project.slug, status="done"))
+        _handle_info(_info_args(project.slug))
         out = capsys.readouterr().out
         assert "status" in out
 

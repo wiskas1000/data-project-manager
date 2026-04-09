@@ -18,7 +18,12 @@ import uuid
 from datetime import date
 from typing import TYPE_CHECKING, Any
 
-from data_project_manager.db.repositories._helpers import now_iso, row_to_dict
+from data_project_manager.db.models.person import (
+    Person,
+    PersonWithRole,
+    ProjectPersonLink,
+)
+from data_project_manager.db.repositories._helpers import now_iso
 
 if TYPE_CHECKING:
     from data_project_manager.db.repositories.changelog import ChangeLogRepository
@@ -65,8 +70,8 @@ class PersonRepository:
         function_title: str | None = None,
         department: str | None = None,
         valid_from: str | None = None,
-    ) -> dict[str, Any]:
-        """Insert a new person and return it as a dict.
+    ) -> Person:
+        """Insert a new person and return it.
 
         Args:
             first_name: Given name.
@@ -78,7 +83,7 @@ class PersonRepository:
                 Defaults to today.
 
         Returns:
-            The newly created person as a dict.
+            The newly created :class:`Person`.
         """
         person_id = str(uuid.uuid4())
         now = now_iso()
@@ -102,38 +107,40 @@ class PersonRepository:
                     now,
                 ),
             )
-        return self.get(person_id)  # type: ignore[return-value]
+        result = self.get(person_id)
+        assert result is not None
+        return result
 
-    def get(self, person_id: str) -> dict[str, Any] | None:
+    def get(self, person_id: str) -> Person | None:
         """Fetch a person by UUID.
 
         Args:
             person_id: UUID primary key.
 
         Returns:
-            Person dict, or ``None`` if not found.
+            :class:`Person`, or ``None`` if not found.
         """
         row = self._conn.execute(
             "SELECT * FROM person WHERE id = ?", (person_id,)
         ).fetchone()
-        return row_to_dict(row)
+        return Person.from_row(row) if row is not None else None
 
-    def get_current_by_email(self, email: str) -> dict[str, Any] | None:
+    def get_current_by_email(self, email: str) -> Person | None:
         """Fetch the current version of a person by email.
 
         Args:
             email: Email address.
 
         Returns:
-            Person dict, or ``None`` if not found.
+            :class:`Person`, or ``None`` if not found.
         """
         row = self._conn.execute(
             "SELECT * FROM person WHERE email = ? AND is_current = 1",
             (email,),
         ).fetchone()
-        return row_to_dict(row)
+        return Person.from_row(row) if row is not None else None
 
-    def list(self, *, current_only: bool = True) -> list[dict[str, Any]]:
+    def list(self, *, current_only: bool = True) -> list[Person]:
         """Return persons, optionally only current versions.
 
         Args:
@@ -141,7 +148,7 @@ class PersonRepository:
                 ``is_current = 1``.
 
         Returns:
-            List of person dicts ordered by last name, first name.
+            List of :class:`Person` instances ordered by last name, first name.
         """
         if current_only:
             query = "SELECT * FROM person WHERE is_current = 1"
@@ -149,7 +156,7 @@ class PersonRepository:
             query = "SELECT * FROM person"
         query += " ORDER BY last_name, first_name"
         rows = self._conn.execute(query).fetchall()
-        return [dict(r) for r in rows]
+        return [Person.from_row(r) for r in rows]
 
     def create_new_version(
         self,
@@ -157,7 +164,7 @@ class PersonRepository:
         *,
         valid_from: str | None = None,
         **fields: Any,
-    ) -> dict[str, Any]:
+    ) -> Person:
         """Create a new SCD2 version of an existing person.
 
         Closes the current version by setting ``valid_to`` and
@@ -170,7 +177,7 @@ class PersonRepository:
             **fields: Fields to change (e.g. ``department="Data Science"``).
 
         Returns:
-            The newly created version as a dict.
+            The newly created :class:`Person` version.
 
         Raises:
             ValueError: If the person does not exist or is not current.
@@ -178,7 +185,7 @@ class PersonRepository:
         current = self.get(person_id)
         if current is None:
             raise ValueError(f"Person {person_id!r} not found.")
-        if not current["is_current"]:
+        if not current.is_current:
             raise ValueError(f"Person {person_id!r} is not the current version.")
 
         vf = valid_from or _today()
@@ -186,11 +193,11 @@ class PersonRepository:
         new_id = str(uuid.uuid4())
 
         # Carry forward all fields, override with provided ones
-        new_first = fields.get("first_name", current["first_name"])
-        new_last = fields.get("last_name", current["last_name"])
-        new_email = fields.get("email", current["email"])
-        new_title = fields.get("function_title", current["function_title"])
-        new_dept = fields.get("department", current["department"])
+        new_first = fields.get("first_name", current.first_name)
+        new_last = fields.get("last_name", current.last_name)
+        new_email = fields.get("email", current.email)
+        new_title = fields.get("function_title", current.function_title)
+        new_dept = fields.get("department", current.department)
 
         new_values = {
             "first_name": new_first,
@@ -219,7 +226,7 @@ class PersonRepository:
             # Log each field that actually changed against the new version's id
             if self._changelog is not None:
                 for field in self._SCD_FIELDS:
-                    old_val = current[field]
+                    old_val = getattr(current, field)
                     new_val = new_values[field]
                     if str(old_val) != str(new_val):
                         self._conn.execute(
@@ -238,7 +245,9 @@ class PersonRepository:
                                 now,
                             ),
                         )
-        return self.get(new_id)  # type: ignore[return-value]
+        result = self.get(new_id)
+        assert result is not None
+        return result
 
 
 class ProjectPersonRepository:
@@ -286,15 +295,15 @@ class ProjectPersonRepository:
                 (project_id, person_id, role),
             )
 
-    def list_for_project(self, project_id: str) -> list[dict[str, Any]]:
+    def list_for_project(self, project_id: str) -> list[PersonWithRole]:
         """Return all person-role entries for a project.
 
         Args:
             project_id: UUID of the project.
 
         Returns:
-            List of dicts with ``person_id``, ``role``, and full person
-            fields joined from the ``person`` table.
+            List of :class:`PersonWithRole` instances joined from the
+            ``person`` table.
         """
         rows = self._conn.execute(
             """
@@ -306,16 +315,16 @@ class ProjectPersonRepository:
             """,
             (project_id,),
         ).fetchall()
-        return [dict(r) for r in rows]
+        return [PersonWithRole.from_row(r) for r in rows]
 
-    def list_for_person(self, person_id: str) -> list[dict[str, Any]]:
+    def list_for_person(self, person_id: str) -> list[ProjectPersonLink]:
         """Return all project-role entries for a person.
 
         Args:
             person_id: UUID of the person.
 
         Returns:
-            List of dicts with ``project_id`` and ``role``.
+            List of :class:`ProjectPersonLink` instances.
         """
         rows = self._conn.execute(
             """
@@ -326,4 +335,4 @@ class ProjectPersonRepository:
             """,
             (person_id,),
         ).fetchall()
-        return [dict(r) for r in rows]
+        return [ProjectPersonLink(**dict(r)) for r in rows]

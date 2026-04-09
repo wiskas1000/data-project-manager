@@ -17,7 +17,9 @@ import sqlite3
 import uuid
 from typing import TYPE_CHECKING, Any
 
-from data_project_manager.db.repositories._helpers import now_iso, row_to_dict
+from data_project_manager.db.models.project import Project
+from data_project_manager.db.models.project_root import ProjectRoot
+from data_project_manager.db.repositories._helpers import now_iso
 
 if TYPE_CHECKING:
     from data_project_manager.db.repositories.changelog import ChangeLogRepository
@@ -40,8 +42,8 @@ class ProjectRootRepository:
         name: str,
         absolute_path: str,
         is_default: bool = False,
-    ) -> dict[str, Any]:
-        """Insert a new project root and return it as a dict.
+    ) -> ProjectRoot:
+        """Insert a new project root and return it.
 
         Args:
             name: Human-readable label (e.g. ``"work"``).
@@ -49,7 +51,7 @@ class ProjectRootRepository:
             is_default: Whether this root is the active default.
 
         Returns:
-            The newly created root as a dict.
+            The newly created :class:`ProjectRoot`.
         """
         root_id = str(uuid.uuid4())
         created_at = now_iso()
@@ -62,55 +64,57 @@ class ProjectRootRepository:
                 """,
                 (root_id, name, absolute_path, int(is_default), created_at),
             )
-        return self.get(root_id)  # type: ignore[return-value]
+        result = self.get(root_id)
+        assert result is not None
+        return result
 
-    def get(self, root_id: str) -> dict[str, Any] | None:
+    def get(self, root_id: str) -> ProjectRoot | None:
         """Fetch a root by its UUID.
 
         Args:
             root_id: UUID primary key.
 
         Returns:
-            Root dict, or ``None`` if not found.
+            :class:`ProjectRoot`, or ``None`` if not found.
         """
         row = self._conn.execute(
             "SELECT * FROM project_root WHERE id = ?", (root_id,)
         ).fetchone()
-        return row_to_dict(row)
+        return ProjectRoot.from_row(row) if row is not None else None
 
-    def get_by_name(self, name: str) -> dict[str, Any] | None:
+    def get_by_name(self, name: str) -> ProjectRoot | None:
         """Fetch a root by its label.
 
         Args:
             name: Root label (e.g. ``"work"``).
 
         Returns:
-            Root dict, or ``None`` if not found.
+            :class:`ProjectRoot`, or ``None`` if not found.
         """
         row = self._conn.execute(
             "SELECT * FROM project_root WHERE name = ?", (name,)
         ).fetchone()
-        return row_to_dict(row)
+        return ProjectRoot.from_row(row) if row is not None else None
 
-    def get_default(self) -> dict[str, Any] | None:
+    def get_default(self) -> ProjectRoot | None:
         """Return the default root, or ``None`` if none is marked default.
 
         Returns:
-            Root dict, or ``None``.
+            :class:`ProjectRoot`, or ``None``.
         """
         row = self._conn.execute(
             "SELECT * FROM project_root WHERE is_default = 1 LIMIT 1"
         ).fetchone()
-        return row_to_dict(row)
+        return ProjectRoot.from_row(row) if row is not None else None
 
-    def list(self) -> list[dict[str, Any]]:
+    def list(self) -> list[ProjectRoot]:
         """Return all roots ordered by name.
 
         Returns:
-            List of root dicts.
+            List of :class:`ProjectRoot` instances.
         """
         rows = self._conn.execute("SELECT * FROM project_root ORDER BY name").fetchall()
-        return [dict(r) for r in rows]
+        return [ProjectRoot.from_row(r) for r in rows]
 
     def set_default(self, root_id: str) -> None:
         """Mark *root_id* as the default, clearing any previous default.
@@ -183,8 +187,8 @@ class ProjectRepository:
         relative_path: str | None = None,
         has_git_repo: bool = False,
         template_used: str | None = None,
-    ) -> dict[str, Any]:
-        """Insert a new project and return it as a dict.
+    ) -> Project:
+        """Insert a new project and return it.
 
         Args:
             title: Human-readable project name.
@@ -206,7 +210,7 @@ class ProjectRepository:
             template_used: Name of the scaffold template.
 
         Returns:
-            The newly created project as a dict.
+            The newly created :class:`Project`.
 
         Raises:
             ValueError: If *status* is not one of the valid values.
@@ -265,35 +269,37 @@ class ProjectRepository:
                     f"Choose a different title or wait until tomorrow."
                 ) from exc
             raise
-        return self.get(project_id)  # type: ignore[return-value]
+        result = self.get(project_id)
+        assert result is not None
+        return result
 
-    def get(self, project_id: str) -> dict[str, Any] | None:
+    def get(self, project_id: str) -> Project | None:
         """Fetch a project by its UUID.
 
         Args:
             project_id: UUID primary key.
 
         Returns:
-            Project dict, or ``None`` if not found.
+            :class:`Project`, or ``None`` if not found.
         """
         row = self._conn.execute(
             "SELECT * FROM project WHERE id = ?", (project_id,)
         ).fetchone()
-        return row_to_dict(row)
+        return Project.from_row(row) if row is not None else None
 
-    def get_by_slug(self, slug: str) -> dict[str, Any] | None:
+    def get_by_slug(self, slug: str) -> Project | None:
         """Fetch a project by its slug.
 
         Args:
             slug: Unique slug (e.g. ``"2026-04-06-churn-analysis"``).
 
         Returns:
-            Project dict, or ``None`` if not found.
+            :class:`Project`, or ``None`` if not found.
         """
         row = self._conn.execute(
             "SELECT * FROM project WHERE slug = ?", (slug,)
         ).fetchone()
-        return row_to_dict(row)
+        return Project.from_row(row) if row is not None else None
 
     def list(
         self,
@@ -301,7 +307,7 @@ class ProjectRepository:
         status: str | None = None,
         domain: str | None = None,
         root_id: str | None = None,
-    ) -> list[dict[str, Any]]:
+    ) -> list[Project]:
         """Return projects, optionally filtered.
 
         Args:
@@ -310,7 +316,8 @@ class ProjectRepository:
             root_id: Filter by root.
 
         Returns:
-            List of project dicts ordered by ``created_at`` descending.
+            List of :class:`Project` instances ordered by ``created_at``
+            descending.
         """
         query = "SELECT * FROM project WHERE 1=1"
         params: list[Any] = []
@@ -325,13 +332,13 @@ class ProjectRepository:
             params.append(root_id)
         query += " ORDER BY created_at DESC"
         rows = self._conn.execute(query, params).fetchall()
-        return [dict(r) for r in rows]
+        return [Project.from_row(r) for r in rows]
 
     def update(
         self,
         project_id: str,
         **fields: Any,
-    ) -> dict[str, Any] | None:
+    ) -> Project | None:
         """Update one or more fields on a project.
 
         Only the keys present in *fields* are changed.  ``updated_at`` is
@@ -343,7 +350,7 @@ class ProjectRepository:
                 column names in the ``project`` table.
 
         Returns:
-            The updated project dict, or ``None`` if not found.
+            The updated :class:`Project`, or ``None`` if not found.
 
         Raises:
             ValueError: If an invalid *status* value is supplied.
@@ -378,7 +385,7 @@ class ProjectRepository:
             )
             if before is not None and self._changelog is not None:
                 for key, new_val in user_fields.items():
-                    old_val = before.get(key)
+                    old_val = getattr(before, key)
                     if str(old_val) != str(new_val):
                         self._conn.execute(
                             """

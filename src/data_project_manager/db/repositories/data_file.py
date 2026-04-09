@@ -16,9 +16,13 @@ Example::
 
 import sqlite3
 import uuid
-from typing import Any
 
-from data_project_manager.db.repositories._helpers import now_iso, row_to_dict
+from data_project_manager.db.models.data_file import (
+    AggregationLevel,
+    DataFile,
+    EntityType,
+)
+from data_project_manager.db.repositories._helpers import now_iso
 
 
 class EntityTypeRepository:
@@ -34,8 +38,8 @@ class EntityTypeRepository:
     def __init__(self, conn: sqlite3.Connection) -> None:
         self._conn = conn
 
-    def create(self, *, name: str) -> dict[str, Any]:
-        """Insert a new entity type and return it as a dict.
+    def create(self, *, name: str) -> EntityType:
+        """Insert a new entity type and return it.
 
         The *name* is normalised to lowercase.  If a type with the same
         name already exists the existing record is returned unchanged.
@@ -44,7 +48,7 @@ class EntityTypeRepository:
             name: Entity type label (normalised to lowercase).
 
         Returns:
-            The entity type as a dict (newly created or existing).
+            The :class:`EntityType` (newly created or existing).
         """
         normalised = name.strip().lower()
         existing = self.get_by_name(normalised)
@@ -56,45 +60,47 @@ class EntityTypeRepository:
                 "INSERT INTO entity_type (id, name) VALUES (?, ?)",
                 (type_id, normalised),
             )
-        return self.get(type_id)  # type: ignore[return-value]
+        result = self.get(type_id)
+        assert result is not None
+        return result
 
-    def get(self, type_id: str) -> dict[str, Any] | None:
+    def get(self, type_id: str) -> EntityType | None:
         """Fetch an entity type by UUID.
 
         Args:
             type_id: UUID primary key.
 
         Returns:
-            Entity type dict, or ``None`` if not found.
+            :class:`EntityType`, or ``None`` if not found.
         """
         row = self._conn.execute(
             "SELECT * FROM entity_type WHERE id = ?", (type_id,)
         ).fetchone()
-        return row_to_dict(row)
+        return EntityType.from_row(row) if row is not None else None
 
-    def get_by_name(self, name: str) -> dict[str, Any] | None:
+    def get_by_name(self, name: str) -> EntityType | None:
         """Fetch an entity type by name (case-insensitive).
 
         Args:
             name: Name to look up (compared as lowercase).
 
         Returns:
-            Entity type dict, or ``None`` if not found.
+            :class:`EntityType`, or ``None`` if not found.
         """
         row = self._conn.execute(
             "SELECT * FROM entity_type WHERE name = ?",
             (name.strip().lower(),),
         ).fetchone()
-        return row_to_dict(row)
+        return EntityType.from_row(row) if row is not None else None
 
-    def list(self) -> list[dict[str, Any]]:
+    def list(self) -> list[EntityType]:
         """Return all entity types ordered by name.
 
         Returns:
-            List of entity type dicts.
+            List of :class:`EntityType` instances.
         """
         rows = self._conn.execute("SELECT * FROM entity_type ORDER BY name").fetchall()
-        return [dict(r) for r in rows]
+        return [EntityType.from_row(r) for r in rows]
 
 
 class AggregationLevelRepository:
@@ -109,8 +115,8 @@ class AggregationLevelRepository:
     def __init__(self, conn: sqlite3.Connection) -> None:
         self._conn = conn
 
-    def create(self, *, name: str) -> dict[str, Any]:
-        """Insert a new aggregation level and return it as a dict.
+    def create(self, *, name: str) -> AggregationLevel:
+        """Insert a new aggregation level and return it.
 
         The *name* is normalised to lowercase.  If a level with the same
         name already exists the existing record is returned unchanged.
@@ -119,7 +125,7 @@ class AggregationLevelRepository:
             name: Aggregation level label (normalised to lowercase).
 
         Returns:
-            The aggregation level as a dict (newly created or existing).
+            The :class:`AggregationLevel` (newly created or existing).
         """
         normalised = name.strip().lower()
         existing = self.get_by_name(normalised)
@@ -131,47 +137,49 @@ class AggregationLevelRepository:
                 "INSERT INTO aggregation_level (id, name) VALUES (?, ?)",
                 (level_id, normalised),
             )
-        return self.get(level_id)  # type: ignore[return-value]
+        result = self.get(level_id)
+        assert result is not None
+        return result
 
-    def get(self, level_id: str) -> dict[str, Any] | None:
+    def get(self, level_id: str) -> AggregationLevel | None:
         """Fetch an aggregation level by UUID.
 
         Args:
             level_id: UUID primary key.
 
         Returns:
-            Aggregation level dict, or ``None`` if not found.
+            :class:`AggregationLevel`, or ``None`` if not found.
         """
         row = self._conn.execute(
             "SELECT * FROM aggregation_level WHERE id = ?", (level_id,)
         ).fetchone()
-        return row_to_dict(row)
+        return AggregationLevel.from_row(row) if row is not None else None
 
-    def get_by_name(self, name: str) -> dict[str, Any] | None:
+    def get_by_name(self, name: str) -> AggregationLevel | None:
         """Fetch an aggregation level by name (case-insensitive).
 
         Args:
             name: Name to look up (compared as lowercase).
 
         Returns:
-            Aggregation level dict, or ``None`` if not found.
+            :class:`AggregationLevel`, or ``None`` if not found.
         """
         row = self._conn.execute(
             "SELECT * FROM aggregation_level WHERE name = ?",
             (name.strip().lower(),),
         ).fetchone()
-        return row_to_dict(row)
+        return AggregationLevel.from_row(row) if row is not None else None
 
-    def list(self) -> list[dict[str, Any]]:
+    def list(self) -> list[AggregationLevel]:
         """Return all aggregation levels ordered by name.
 
         Returns:
-            List of aggregation level dicts.
+            List of :class:`AggregationLevel` instances.
         """
         rows = self._conn.execute(
             "SELECT * FROM aggregation_level ORDER BY name"
         ).fetchall()
-        return [dict(r) for r in rows]
+        return [AggregationLevel.from_row(r) for r in rows]
 
 
 class DataFileRepository:
@@ -196,8 +204,8 @@ class DataFileRepository:
         data_period_from: str | None = None,
         data_period_to: str | None = None,
         retention_date: str | None = None,
-    ) -> dict[str, Any]:
-        """Insert a new data file record and return it as a dict.
+    ) -> DataFile:
+        """Insert a new data file record and return it.
 
         Args:
             project_id: UUID of the owning project.
@@ -211,7 +219,7 @@ class DataFileRepository:
             retention_date: ISO date after which the file may be purged.
 
         Returns:
-            The newly created data file as a dict.
+            The newly created :class:`DataFile`.
         """
         file_id = str(uuid.uuid4())
         now = now_iso()
@@ -237,45 +245,47 @@ class DataFileRepository:
                     now,
                 ),
             )
-        return self.get(file_id)  # type: ignore[return-value]
+        result = self.get(file_id)
+        assert result is not None
+        return result
 
-    def get(self, file_id: str) -> dict[str, Any] | None:
+    def get(self, file_id: str) -> DataFile | None:
         """Fetch a data file by UUID.
 
         Args:
             file_id: UUID primary key.
 
         Returns:
-            Data file dict, or ``None`` if not found.
+            :class:`DataFile`, or ``None`` if not found.
         """
         row = self._conn.execute(
             "SELECT * FROM data_file WHERE id = ?", (file_id,)
         ).fetchone()
-        return row_to_dict(row)
+        return DataFile.from_row(row) if row is not None else None
 
-    def list_for_project(self, project_id: str) -> list[dict[str, Any]]:
+    def list_for_project(self, project_id: str) -> list[DataFile]:
         """Return all data files for a project.
 
         Args:
             project_id: UUID of the project.
 
         Returns:
-            List of data file dicts ordered by file path.
+            List of :class:`DataFile` instances ordered by file path.
         """
         rows = self._conn.execute(
             "SELECT * FROM data_file WHERE project_id = ? ORDER BY file_path",
             (project_id,),
         ).fetchall()
-        return [dict(r) for r in rows]
+        return [DataFile.from_row(r) for r in rows]
 
-    def mark_purged(self, file_id: str) -> dict[str, Any]:
+    def mark_purged(self, file_id: str) -> DataFile:
         """Set ``purged_at`` to now for a data file.
 
         Args:
             file_id: UUID of the file to mark as purged.
 
         Returns:
-            The updated data file dict.
+            The updated :class:`DataFile`.
 
         Raises:
             ValueError: If the file does not exist.
@@ -287,7 +297,9 @@ class DataFileRepository:
             )
             if cursor.rowcount == 0:
                 raise ValueError(f"DataFile {file_id!r} not found.")
-        return self.get(file_id)  # type: ignore[return-value]
+        result = self.get(file_id)
+        assert result is not None
+        return result
 
 
 class DataFileEntityTypeRepository:
@@ -333,14 +345,14 @@ class DataFileEntityTypeRepository:
                 (data_file_id, entity_type_id),
             )
 
-    def list_for_file(self, data_file_id: str) -> list[dict[str, Any]]:
+    def list_for_file(self, data_file_id: str) -> list[EntityType]:
         """Return all entity types for a data file.
 
         Args:
             data_file_id: UUID of the data file.
 
         Returns:
-            List of entity type dicts ordered by name.
+            List of :class:`EntityType` instances ordered by name.
         """
         rows = self._conn.execute(
             """
@@ -352,7 +364,7 @@ class DataFileEntityTypeRepository:
             """,
             (data_file_id,),
         ).fetchall()
-        return [dict(r) for r in rows]
+        return [EntityType.from_row(r) for r in rows]
 
 
 class DataFileAggregationRepository:
@@ -398,14 +410,14 @@ class DataFileAggregationRepository:
                 (data_file_id, agg_level_id),
             )
 
-    def list_for_file(self, data_file_id: str) -> list[dict[str, Any]]:
+    def list_for_file(self, data_file_id: str) -> list[AggregationLevel]:
         """Return all aggregation levels for a data file.
 
         Args:
             data_file_id: UUID of the data file.
 
         Returns:
-            List of aggregation level dicts ordered by name.
+            List of :class:`AggregationLevel` instances ordered by name.
         """
         rows = self._conn.execute(
             """
@@ -417,4 +429,4 @@ class DataFileAggregationRepository:
             """,
             (data_file_id,),
         ).fetchall()
-        return [dict(r) for r in rows]
+        return [AggregationLevel.from_row(r) for r in rows]

@@ -156,22 +156,21 @@ def scaffold_folders(
             (project_path / folder_name / child_name).mkdir(exist_ok=True)
 
 
-def export_project_json(project: dict[str, Any], project_path: Path) -> Path:
+def export_project_json(project: dict[str, Any] | Any, project_path: Path) -> Path:
     """Write *project* metadata to ``project.json`` inside *project_path*.
 
     Args:
-        project: Project dict (as returned by
+        project: Project dataclass or dict (as returned by
             :class:`~data_project_manager.db.repositories.project.ProjectRepository`).
         project_path: Root of the project folder.
 
     Returns:
         Path to the written ``project.json`` file.
     """
-    export: dict[str, Any] = {
-        k: v
-        for k, v in project.items()
-        if k != "project_path"  # strip runtime-only key
-    }
+    from dataclasses import asdict
+
+    raw = asdict(project) if hasattr(project, "__dataclass_fields__") else dict(project)
+    export: dict[str, Any] = {k: v for k, v in raw.items() if k != "project_path"}
     export["exported_at"] = datetime.now(UTC).isoformat()
 
     json_path = project_path / "project.json"
@@ -338,8 +337,8 @@ def create_project(
                             is_default=is_def,
                         )
                 if root_record:
-                    root_id = root_record["id"]
-                    project_root_path = Path(root_record["absolute_path"])
+                    root_id = root_record.id
+                    project_root_path = Path(root_record.absolute_path)
 
         project_path = (
             (project_root_path / folder_name)
@@ -375,12 +374,14 @@ def create_project(
             src_dir = project_path / src_name
             did_init = git_init_project(src_dir)
             if not did_init:
-                proj_repo.update(project["id"], has_git_repo=False)
-                project = proj_repo.get(project["id"])  # type: ignore[assignment]
+                proj_repo.update(project.id, has_git_repo=False)
+                project = proj_repo.get(project.id)  # type: ignore[assignment]
 
         export_project_json(project, project_path)
 
-        return {**project, "project_path": str(project_path)}
+        from dataclasses import asdict
+
+        return {**asdict(project), "project_path": str(project_path)}
     finally:
         conn.close()
 

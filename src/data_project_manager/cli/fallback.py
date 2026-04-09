@@ -242,8 +242,8 @@ def _handle_list(args: argparse.Namespace) -> None:
         print("No projects found.")
         return
 
-    col_slug = max(len(p["slug"]) for p in projects)
-    col_status = max(len(p["status"]) for p in projects)
+    col_slug = max(len(p.slug) for p in projects)
+    col_status = max(len(p.status) for p in projects)
     col_slug = max(col_slug, 4)
     col_status = max(col_status, 6)
 
@@ -251,10 +251,7 @@ def _handle_list(args: argparse.Namespace) -> None:
     print(header)
     print("-" * len(header))
     for p in projects:
-        slug = p["slug"]
-        status = p["status"]
-        title = p["title"]
-        print(f"{slug:<{col_slug}}  {status:<{col_status}}  {title}")
+        print(f"{p.slug:<{col_slug}}  {p.status:<{col_status}}  {p.title}")
 
 
 def _handle_info(args: argparse.Namespace) -> None:
@@ -272,50 +269,50 @@ def _handle_info(args: argparse.Namespace) -> None:
             print(f"Error: project '{args.slug}' not found.", file=sys.stderr)
             sys.exit(1)
 
-        pid = project["id"]
+        pid = project.id
         tags = ProjectTagRepository(conn).list_for_project(pid)
         people = ProjectPersonRepository(conn).list_for_project(pid)
         log = ChangeLogRepository(conn).list_for_entity("project", pid)
 
         width = 60
-        pad = max(0, width - 5 - len(project["title"]))
-        print(f"\n{'─' * 3} {project['title']} {'─' * pad}")
+        pad = max(0, width - 5 - len(project.title))
+        print(f"\n{'─' * 3} {project.title} {'─' * pad}")
 
-        fields = [
-            ("Slug", project["slug"]),
-            ("Status", project["status"]),
-            ("Domain", project.get("domain") or ""),
-            ("Description", project.get("description") or ""),
-            ("Template", project.get("template_used") or ""),
-            ("Git", "yes" if project.get("has_git_repo") else "no"),
-            ("Path", project.get("relative_path") or ""),
-            ("Request date", project.get("request_date") or ""),
-            ("Expected start", project.get("expected_start") or ""),
-            ("Expected end", project.get("expected_end") or ""),
-            ("Realized start", project.get("realized_start") or ""),
-            ("Realized end", project.get("realized_end") or ""),
-            ("Est. hours", str(project.get("estimated_hours") or "")),
+        info_fields = [
+            ("Slug", project.slug),
+            ("Status", project.status),
+            ("Domain", project.domain or ""),
+            ("Description", project.description or ""),
+            ("Template", project.template_used or ""),
+            ("Git", "yes" if project.has_git_repo else "no"),
+            ("Path", project.relative_path or ""),
+            ("Request date", project.request_date or ""),
+            ("Expected start", project.expected_start or ""),
+            ("Expected end", project.expected_end or ""),
+            ("Realized start", project.realized_start or ""),
+            ("Realized end", project.realized_end or ""),
+            ("Est. hours", str(project.estimated_hours or "")),
         ]
-        for label, value in fields:
+        for label, value in info_fields:
             if value:
                 print(f"  {label:<16} {value}")
 
         if tags:
-            print(f"\n  Tags: {', '.join(t['name'] for t in tags)}")
+            print(f"\n  Tags: {', '.join(t.name for t in tags)}")
 
         if people:
             print("\n  People:")
             for p in people:
-                full = f"{p['first_name']} {p['last_name']}"
-                print(f"    {full:<24} {p['role']}")
+                full = f"{p.first_name} {p.last_name}"
+                print(f"    {full:<24} {p.role}")
 
         if log:
             print("\n  Change log (last 5):")
             for entry in log[-5:]:
-                ts = entry["changed_at"][:19]
+                ts = entry.changed_at[:19]
                 print(
-                    f"    {ts}  {entry['field_name']:<16}"
-                    f"  {entry['old_value']} → {entry['new_value']}"
+                    f"    {ts}  {entry.field_name:<16}"
+                    f"  {entry.old_value} → {entry.new_value}"
                 )
         print()
     finally:
@@ -354,7 +351,7 @@ def _handle_project_update(args: argparse.Namespace) -> None:
             print(f"Error: project '{args.slug}' not found.", file=sys.stderr)
             sys.exit(1)
 
-        pid = project["id"]
+        pid = project.id
 
         # Collect scalar field updates
         updates: dict = {}
@@ -383,11 +380,11 @@ def _handle_project_update(args: argparse.Namespace) -> None:
         pt_repo = ProjectTagRepository(conn)
         for name in args.tags or []:
             tag = tag_repo.create(name=name)
-            pt_repo.add(project_id=pid, tag_id=tag["id"])
+            pt_repo.add(project_id=pid, tag_id=tag.id)
         for name in args.remove_tags or []:
             tag = tag_repo.get_by_name(name)
             if tag:
-                pt_repo.remove(project_id=pid, tag_id=tag["id"])
+                pt_repo.remove(project_id=pid, tag_id=tag.id)
 
         if not updates and not args.tags and not args.remove_tags:
             print("Nothing to update.")
@@ -396,7 +393,7 @@ def _handle_project_update(args: argparse.Namespace) -> None:
         # Print summary
         print(f"Updated '{args.slug}':")
         for key, new_val in updates.items():
-            print(f"  {key}: {project[key]} → {new_val}")
+            print(f"  {key}: {getattr(project, key)} → {new_val}")
         for name in args.tags or []:
             print(f"  tag added: {name}")
         for name in args.remove_tags or []:

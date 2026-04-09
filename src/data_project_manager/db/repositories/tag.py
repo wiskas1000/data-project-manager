@@ -12,9 +12,8 @@ Example::
 
 import sqlite3
 import uuid
-from typing import Any
 
-from data_project_manager.db.repositories._helpers import row_to_dict
+from data_project_manager.db.models.tag import Tag
 
 
 class TagRepository:
@@ -36,8 +35,8 @@ class TagRepository:
         *,
         name: str,
         category: str | None = None,
-    ) -> dict[str, Any]:
-        """Insert a new tag and return it as a dict.
+    ) -> Tag:
+        """Insert a new tag and return it.
 
         The *name* is normalised to lowercase.  If a tag with the same
         name already exists, the existing tag is returned instead.
@@ -47,7 +46,7 @@ class TagRepository:
             category: Optional grouping (e.g. ``"method"``, ``"domain"``).
 
         Returns:
-            The tag as a dict (newly created or existing).
+            The :class:`Tag` (newly created or existing).
         """
         normalised = name.strip().lower()
         existing = self.get_by_name(normalised)
@@ -60,42 +59,44 @@ class TagRepository:
                 "INSERT INTO tag (id, name, category) VALUES (?, ?, ?)",
                 (tag_id, normalised, category),
             )
-        return self.get(tag_id)  # type: ignore[return-value]
+        result = self.get(tag_id)
+        assert result is not None
+        return result
 
-    def get(self, tag_id: str) -> dict[str, Any] | None:
+    def get(self, tag_id: str) -> Tag | None:
         """Fetch a tag by UUID.
 
         Args:
             tag_id: UUID primary key.
 
         Returns:
-            Tag dict, or ``None`` if not found.
+            :class:`Tag`, or ``None`` if not found.
         """
         row = self._conn.execute("SELECT * FROM tag WHERE id = ?", (tag_id,)).fetchone()
-        return row_to_dict(row)
+        return Tag.from_row(row) if row is not None else None
 
-    def get_by_name(self, name: str) -> dict[str, Any] | None:
+    def get_by_name(self, name: str) -> Tag | None:
         """Fetch a tag by its normalised name.
 
         Args:
             name: Tag label (case-insensitive — compared as lowercase).
 
         Returns:
-            Tag dict, or ``None`` if not found.
+            :class:`Tag`, or ``None`` if not found.
         """
         row = self._conn.execute(
             "SELECT * FROM tag WHERE name = ?", (name.strip().lower(),)
         ).fetchone()
-        return row_to_dict(row)
+        return Tag.from_row(row) if row is not None else None
 
-    def list(self, *, category: str | None = None) -> list[dict[str, Any]]:
+    def list(self, *, category: str | None = None) -> list[Tag]:
         """Return all tags, optionally filtered by category.
 
         Args:
             category: If provided, only return tags in this category.
 
         Returns:
-            List of tag dicts ordered by name.
+            List of :class:`Tag` instances ordered by name.
         """
         if category is not None:
             rows = self._conn.execute(
@@ -104,7 +105,7 @@ class TagRepository:
             ).fetchall()
         else:
             rows = self._conn.execute("SELECT * FROM tag ORDER BY name").fetchall()
-        return [dict(r) for r in rows]
+        return [Tag.from_row(r) for r in rows]
 
 
 class ProjectTagRepository:
@@ -146,14 +147,14 @@ class ProjectTagRepository:
                 (project_id, tag_id),
             )
 
-    def list_for_project(self, project_id: str) -> list[dict[str, Any]]:
+    def list_for_project(self, project_id: str) -> list[Tag]:
         """Return all tags for a project.
 
         Args:
             project_id: UUID of the project.
 
         Returns:
-            List of tag dicts ordered by name.
+            List of :class:`Tag` instances ordered by name.
         """
         rows = self._conn.execute(
             """
@@ -165,7 +166,7 @@ class ProjectTagRepository:
             """,
             (project_id,),
         ).fetchall()
-        return [dict(r) for r in rows]
+        return [Tag.from_row(r) for r in rows]
 
     def list_projects_for_tag(self, tag_id: str) -> list[str]:
         """Return project IDs that have a given tag.

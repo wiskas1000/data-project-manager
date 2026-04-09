@@ -12,9 +12,10 @@ Example::
 
 import sqlite3
 import uuid
-from typing import Any
 
-from data_project_manager.db.repositories._helpers import now_iso, row_to_dict
+from data_project_manager.db.models.data_file import DataFile
+from data_project_manager.db.models.deliverable import Deliverable
+from data_project_manager.db.repositories._helpers import now_iso
 
 
 class DeliverableRepository:
@@ -37,8 +38,8 @@ class DeliverableRepository:
         file_format: str | None = None,
         version: str | None = None,
         delivered_at: str | None = None,
-    ) -> dict[str, Any]:
-        """Insert a new deliverable and return it as a dict.
+    ) -> Deliverable:
+        """Insert a new deliverable and return it.
 
         Args:
             project_id: UUID of the owning project.
@@ -49,7 +50,7 @@ class DeliverableRepository:
             delivered_at: ISO datetime when the deliverable was sent.
 
         Returns:
-            The newly created deliverable as a dict.
+            The newly created :class:`Deliverable`.
         """
         deliverable_id = str(uuid.uuid4())
         now = now_iso()
@@ -72,45 +73,48 @@ class DeliverableRepository:
                     now,
                 ),
             )
-        return self.get(deliverable_id)  # type: ignore[return-value]
+        result = self.get(deliverable_id)
+        assert result is not None
+        return result
 
-    def get(self, deliverable_id: str) -> dict[str, Any] | None:
+    def get(self, deliverable_id: str) -> Deliverable | None:
         """Fetch a deliverable by UUID.
 
         Args:
             deliverable_id: UUID primary key.
 
         Returns:
-            Deliverable dict, or ``None`` if not found.
+            :class:`Deliverable`, or ``None`` if not found.
         """
         row = self._conn.execute(
             "SELECT * FROM deliverable WHERE id = ?", (deliverable_id,)
         ).fetchone()
-        return row_to_dict(row)
+        return Deliverable.from_row(row) if row is not None else None
 
-    def list_for_project(self, project_id: str) -> list[dict[str, Any]]:
+    def list_for_project(self, project_id: str) -> list[Deliverable]:
         """Return all deliverables for a project.
 
         Args:
             project_id: UUID of the project.
 
         Returns:
-            List of deliverable dicts ordered by created_at descending.
+            List of :class:`Deliverable` instances ordered by created_at
+            descending.
         """
         rows = self._conn.execute(
             "SELECT * FROM deliverable WHERE project_id = ? ORDER BY created_at DESC",
             (project_id,),
         ).fetchall()
-        return [dict(r) for r in rows]
+        return [Deliverable.from_row(r) for r in rows]
 
-    def mark_delivered(self, deliverable_id: str) -> dict[str, Any]:
+    def mark_delivered(self, deliverable_id: str) -> Deliverable:
         """Set ``delivered_at`` to now.
 
         Args:
             deliverable_id: UUID of the deliverable to mark.
 
         Returns:
-            The updated deliverable dict.
+            The updated :class:`Deliverable`.
 
         Raises:
             ValueError: If the deliverable does not exist.
@@ -122,7 +126,9 @@ class DeliverableRepository:
             )
             if cursor.rowcount == 0:
                 raise ValueError(f"Deliverable {deliverable_id!r} not found.")
-        return self.get(deliverable_id)  # type: ignore[return-value]
+        result = self.get(deliverable_id)
+        assert result is not None
+        return result
 
 
 class DeliverableDataFileRepository:
@@ -168,14 +174,14 @@ class DeliverableDataFileRepository:
                 (deliverable_id, data_file_id),
             )
 
-    def list_for_deliverable(self, deliverable_id: str) -> list[dict[str, Any]]:
+    def list_for_deliverable(self, deliverable_id: str) -> list[DataFile]:
         """Return all data files linked to a deliverable.
 
         Args:
             deliverable_id: UUID of the deliverable.
 
         Returns:
-            List of data file dicts ordered by file path.
+            List of :class:`DataFile` instances ordered by file path.
         """
         rows = self._conn.execute(
             """
@@ -187,4 +193,4 @@ class DeliverableDataFileRepository:
             """,
             (deliverable_id,),
         ).fetchall()
-        return [dict(r) for r in rows]
+        return [DataFile.from_row(r) for r in rows]

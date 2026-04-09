@@ -22,9 +22,9 @@ Example::
 
 import sqlite3
 import uuid
-from typing import Any
 
-from data_project_manager.db.repositories._helpers import now_iso, row_to_dict
+from data_project_manager.db.models.changelog import ChangeLogEntry
+from data_project_manager.db.repositories._helpers import now_iso
 
 
 class ChangeLogRepository:
@@ -51,8 +51,8 @@ class ChangeLogRepository:
         field_name: str,
         old_value: str | None,
         new_value: str | None,
-    ) -> dict[str, Any]:
-        """Insert a single change-log entry and return it as a dict.
+    ) -> ChangeLogEntry:
+        """Insert a single change-log entry and return it.
 
         Args:
             entity_type: Name of the table that changed (e.g. ``"project"``).
@@ -62,7 +62,7 @@ class ChangeLogRepository:
             new_value: New value as a string, or ``None``.
 
         Returns:
-            The newly created log entry as a dict.
+            The newly created :class:`ChangeLogEntry`.
         """
         entry_id = str(uuid.uuid4())
         changed_at = now_iso()
@@ -84,27 +84,29 @@ class ChangeLogRepository:
                     changed_at,
                 ),
             )
-        return self.get(entry_id)  # type: ignore[return-value]
+        result = self.get(entry_id)
+        assert result is not None
+        return result
 
-    def get(self, entry_id: str) -> dict[str, Any] | None:
+    def get(self, entry_id: str) -> ChangeLogEntry | None:
         """Fetch a log entry by UUID.
 
         Args:
             entry_id: UUID primary key.
 
         Returns:
-            Log entry dict, or ``None`` if not found.
+            :class:`ChangeLogEntry`, or ``None`` if not found.
         """
         row = self._conn.execute(
             "SELECT * FROM change_log WHERE id = ?", (entry_id,)
         ).fetchone()
-        return row_to_dict(row)
+        return ChangeLogEntry.from_row(row) if row is not None else None
 
     def list_for_entity(
         self,
         entity_type: str,
         entity_id: str,
-    ) -> list[dict[str, Any]]:
+    ) -> list[ChangeLogEntry]:
         """Return all log entries for a specific record.
 
         Args:
@@ -112,7 +114,8 @@ class ChangeLogRepository:
             entity_id: UUID of the record.
 
         Returns:
-            List of log entry dicts ordered by ``changed_at`` ascending.
+            List of :class:`ChangeLogEntry` instances ordered by
+            ``changed_at`` ascending.
         """
         rows = self._conn.execute(
             """
@@ -122,14 +125,14 @@ class ChangeLogRepository:
             """,
             (entity_type, entity_id),
         ).fetchall()
-        return [dict(r) for r in rows]
+        return [ChangeLogEntry.from_row(r) for r in rows]
 
     def list_for_field(
         self,
         entity_type: str,
         entity_id: str,
         field_name: str,
-    ) -> list[dict[str, Any]]:
+    ) -> list[ChangeLogEntry]:
         """Return the change history for a single field on a record.
 
         Args:
@@ -138,7 +141,8 @@ class ChangeLogRepository:
             field_name: Column name to filter by.
 
         Returns:
-            List of log entry dicts ordered by ``changed_at`` ascending.
+            List of :class:`ChangeLogEntry` instances ordered by
+            ``changed_at`` ascending.
         """
         rows = self._conn.execute(
             """
@@ -148,4 +152,4 @@ class ChangeLogRepository:
             """,
             (entity_type, entity_id, field_name),
         ).fetchall()
-        return [dict(r) for r in rows]
+        return [ChangeLogEntry.from_row(r) for r in rows]
