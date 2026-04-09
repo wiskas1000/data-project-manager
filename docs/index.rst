@@ -7,7 +7,11 @@ A project launcher and metadata database for analytical work.
    :maxdepth: 2
    :caption: Usage
 
+   usage/quickstart
+   usage/cli
    usage/library
+   usage/templates
+   usage/faq
 
 .. toctree::
    :maxdepth: 2
