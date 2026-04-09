@@ -460,13 +460,18 @@ def search(
     table.add_column("Status", no_wrap=True)
     table.add_column("Domain", style="dim")
     table.add_column("Title")
+    table.add_column("Description", style="dim", max_width=40)
 
     for r in results:
+        desc = (r.description or "")[:40]
+        if r.description and len(r.description) > 40:
+            desc = desc[:37] + "..."
         table.add_row(
             r.slug,
             _status_text(r.status),
             r.domain or "",
             r.title,
+            desc,
         )
 
     _console.print(table)
@@ -485,21 +490,35 @@ def export(
     export_all: Annotated[
         bool, typer.Option("--all", help="Export all projects")
     ] = False,
+    output: Annotated[
+        str | None,
+        typer.Option("--output", "-o", help="Write JSON to file instead of stdout"),
+    ] = None,
+    compact: Annotated[
+        bool, typer.Option("--compact", help="Minified JSON (no indentation)")
+    ] = False,
 ) -> None:
     """Export project metadata as structured JSON."""
-    from rich.syntax import Syntax
-
     from data_project_manager.core.export import export_all_json, export_project_json
 
+    pretty = not compact
     if export_all or slug is None:
-        output = export_all_json()
+        json_output = export_all_json(pretty=pretty)
     else:
-        output = export_project_json(slug)
-        if output is None:
+        json_output = export_project_json(slug, pretty=pretty)
+        if json_output is None:
             _err_console.print(f"[bold red]Error:[/] project '{slug}' not found.")
             raise typer.Exit(1)
 
-    _console.print(Syntax(output, "json", theme="monokai"))
+    if output:
+        from pathlib import Path
+
+        Path(output).write_text(json_output + "\n", encoding="utf-8")
+        _console.print(f"[bold green]✓[/] Exported to [cyan]{output}[/]")
+    else:
+        from rich.syntax import Syntax
+
+        _console.print(Syntax(json_output, "json", theme="monokai"))
 
 
 # ---------------------------------------------------------------------------
