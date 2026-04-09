@@ -68,6 +68,38 @@ def main() -> None:
     list_parser.add_argument("--status", help="Filter by status")
     list_parser.add_argument("--domain", help="Filter by domain")
 
+    # info
+    info_parser = subparsers.add_parser("info", help="Show all metadata for a project")
+    info_parser.add_argument("slug", help="Project slug")
+
+    # project
+    project_parser = subparsers.add_parser("project", help="Manage project metadata")
+    project_sub = project_parser.add_subparsers(dest="project_command")
+    project_update = project_sub.add_parser("update", help="Update project metadata")
+    project_update.add_argument("slug", help="Project slug")
+    project_update.add_argument(
+        "--status", help="New status (active/paused/done/archived)"
+    )
+    project_update.add_argument("--domain", help="Subject area")
+    project_update.add_argument("--description", help="Free-text description")
+    project_update.add_argument(
+        "--external-url", dest="external_url", help="DevOps/Trello URL"
+    )
+    project_update.add_argument(
+        "--tag",
+        dest="tags",
+        action="append",
+        metavar="NAME",
+        help="Add a tag (repeatable)",
+    )
+    project_update.add_argument(
+        "--remove-tag",
+        dest="remove_tags",
+        action="append",
+        metavar="NAME",
+        help="Remove a tag (repeatable)",
+    )
+
     # search
     search_parser = subparsers.add_parser("search", help="Search projects by metadata")
     search_parser.add_argument("query", help="Search query")
@@ -92,6 +124,10 @@ def main() -> None:
         _handle_new(args)
     elif args.command == "list":
         _handle_list(args)
+    elif args.command == "info":
+        _handle_info(args)
+    elif args.command == "project":
+        _handle_project(args, project_parser)
     elif args.command == "search":
         print(f"Searching for: {args.query}")
     elif args.command == "config":
@@ -219,6 +255,155 @@ def _handle_list(args: argparse.Namespace) -> None:
         status = p["status"]
         title = p["title"]
         print(f"{slug:<{col_slug}}  {status:<{col_status}}  {title}")
+
+
+def _handle_info(args: argparse.Namespace) -> None:
+    """Display all metadata for a project."""
+    from data_project_manager.db.connection import get_connection
+    from data_project_manager.db.repositories.changelog import ChangeLogRepository
+    from data_project_manager.db.repositories.person import ProjectPersonRepository
+    from data_project_manager.db.repositories.project import ProjectRepository
+    from data_project_manager.db.repositories.tag import ProjectTagRepository
+
+    conn = get_connection()
+    try:
+        project = ProjectRepository(conn).get_by_slug(args.slug)
+        if project is None:
+            print(f"Error: project '{args.slug}' not found.", file=sys.stderr)
+            sys.exit(1)
+
+        pid = project["id"]
+        tags = ProjectTagRepository(conn).list_for_project(pid)
+        people = ProjectPersonRepository(conn).list_for_project(pid)
+        log = ChangeLogRepository(conn).list_for_entity("project", pid)
+
+        width = 60
+        pad = max(0, width - 5 - len(project["title"]))
+        print(f"\n{'─' * 3} {project['title']} {'─' * pad}")
+
+        fields = [
+            ("Slug", project["slug"]),
+            ("Status", project["status"]),
+            ("Domain", project.get("domain") or ""),
+            ("Description", project.get("description") or ""),
+            ("Template", project.get("template_used") or ""),
+            ("Git", "yes" if project.get("has_git_repo") else "no"),
+            ("Path", project.get("relative_path") or ""),
+            ("Request date", project.get("request_date") or ""),
+            ("Expected start", project.get("expected_start") or ""),
+            ("Expected end", project.get("expected_end") or ""),
+            ("Realized start", project.get("realized_start") or ""),
+            ("Realized end", project.get("realized_end") or ""),
+            ("Est. hours", str(project.get("estimated_hours") or "")),
+        ]
+        for label, value in fields:
+            if value:
+                print(f"  {label:<16} {value}")
+
+        if tags:
+            print(f"\n  Tags: {', '.join(t['name'] for t in tags)}")
+
+        if people:
+            print("\n  People:")
+            for p in people:
+                full = f"{p['first_name']} {p['last_name']}"
+                print(f"    {full:<24} {p['role']}")
+
+        if log:
+            print("\n  Change log (last 5):")
+            for entry in log[-5:]:
+                ts = entry["changed_at"][:19]
+                print(
+                    f"    {ts}  {entry['field_name']:<16}"
+                    f"  {entry['old_value']} → {entry['new_value']}"
+                )
+        print()
+    finally:
+        conn.close()
+
+
+def _handle_project(
+    args: argparse.Namespace,
+    project_parser: argparse.ArgumentParser,
+) -> None:
+    """Dispatch project sub-commands."""
+    if args.project_command is None:
+        project_parser.print_help()
+        return
+    if args.project_command == "update":
+        _handle_project_update(args)
+
+
+def _handle_project_update(args: argparse.Namespace) -> None:
+    """Update mutable fields on a project."""
+    from data_project_manager.db.connection import get_connection
+    from data_project_manager.db.repositories.changelog import ChangeLogRepository
+    from data_project_manager.db.repositories.project import ProjectRepository
+    from data_project_manager.db.repositories.tag import (
+        ProjectTagRepository,
+        TagRepository,
+    )
+
+    conn = get_connection()
+    try:
+        changelog = ChangeLogRepository(conn)
+        repo = ProjectRepository(conn, changelog=changelog)
+
+        project = repo.get_by_slug(args.slug)
+        if project is None:
+            print(f"Error: project '{args.slug}' not found.", file=sys.stderr)
+            sys.exit(1)
+
+        pid = project["id"]
+
+        # Collect scalar field updates
+        updates: dict = {}
+        if args.status is not None:
+            valid = {"active", "paused", "done", "archived"}
+            if args.status not in valid:
+                print(
+                    f"Error: invalid status '{args.status}'. "
+                    f"Must be one of {sorted(valid)}.",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            updates["status"] = args.status
+        if args.domain is not None:
+            updates["domain"] = args.domain
+        if args.description is not None:
+            updates["description"] = args.description
+        if args.external_url is not None:
+            updates["external_url"] = args.external_url
+
+        if updates:
+            repo.update(pid, **updates)
+
+        # Tag operations
+        tag_repo = TagRepository(conn)
+        pt_repo = ProjectTagRepository(conn)
+        for name in args.tags or []:
+            tag = tag_repo.create(name=name)
+            pt_repo.add(project_id=pid, tag_id=tag["id"])
+        for name in args.remove_tags or []:
+            tag = tag_repo.get_by_name(name)
+            if tag:
+                pt_repo.remove(project_id=pid, tag_id=tag["id"])
+
+        if not updates and not args.tags and not args.remove_tags:
+            print("Nothing to update.")
+            return
+
+        # Print summary
+        print(f"Updated '{args.slug}':")
+        for key, new_val in updates.items():
+            print(f"  {key}: {project[key]} → {new_val}")
+        for name in args.tags or []:
+            print(f"  tag added: {name}")
+        for name in args.remove_tags or []:
+            print(f"  tag removed: {name}")
+        print()
+    finally:
+        conn.close()
 
 
 def _handle_config(
