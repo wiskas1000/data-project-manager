@@ -408,10 +408,68 @@ def project_update(
 
 @app.command()
 def search(
-    query: Annotated[str, typer.Argument(help="Search query")],
+    query: Annotated[str | None, typer.Argument(help="Free-text search query")] = None,
+    domain: Annotated[str | None, typer.Option(help="Filter by domain")] = None,
+    status: Annotated[
+        str | None,
+        typer.Option(help="Filter by status (active/paused/done/archived)"),
+    ] = None,
+    tags: Annotated[
+        list[str] | None,
+        typer.Option("--tag", help="Filter by tag (repeatable)"),
+    ] = None,
+    date_from: Annotated[
+        str | None,
+        typer.Option("--from", help="Projects created on or after this ISO date"),
+    ] = None,
+    date_to: Annotated[
+        str | None,
+        typer.Option("--to", help="Projects created on or before this ISO date"),
+    ] = None,
 ) -> None:
-    """Search projects by metadata."""
-    _console.print(f"Searching for: [bold]{query}[/]")
+    """Search projects by text and/or structured filters."""
+    from data_project_manager.core.search import search_projects
+
+    if not any([query, domain, status, tags, date_from, date_to]):
+        _err_console.print(
+            "[bold red]Error:[/] provide a search query or at least one filter."
+        )
+        raise typer.Exit(1)
+
+    results = search_projects(
+        query,
+        domain=domain,
+        status=status,
+        tags=tags,
+        date_from=date_from,
+        date_to=date_to,
+    )
+
+    if not results:
+        _console.print("[dim]No projects found.[/]")
+        return
+
+    _console.print(f"Found [bold]{len(results)}[/] project(s):\n")
+    table = Table(
+        show_header=True,
+        header_style="bold",
+        box=None,
+        pad_edge=False,
+    )
+    table.add_column("Slug", style="cyan", no_wrap=True)
+    table.add_column("Status", no_wrap=True)
+    table.add_column("Domain", style="dim")
+    table.add_column("Title")
+
+    for r in results:
+        table.add_row(
+            r.slug,
+            _status_text(r.status),
+            r.domain or "",
+            r.title,
+        )
+
+    _console.print(table)
 
 
 # ---------------------------------------------------------------------------
