@@ -18,6 +18,9 @@ app = typer.Typer(
 config_app = typer.Typer(help="Manage configuration.")
 app.add_typer(config_app, name="config")
 
+project_app = typer.Typer(help="Manage project metadata.")
+app.add_typer(project_app, name="project")
+
 _console = Console()
 _err_console = Console(stderr=True)
 
@@ -215,6 +218,187 @@ def list_cmd(
         )
 
     _console.print(table)
+
+
+# ---------------------------------------------------------------------------
+# info
+# ---------------------------------------------------------------------------
+
+
+@app.command()
+def info(
+    slug: Annotated[str, typer.Argument(help="Project slug")],
+) -> None:
+    """Show all metadata for a project."""
+    from data_project_manager.db.connection import get_connection
+    from data_project_manager.db.repositories.changelog import ChangeLogRepository
+    from data_project_manager.db.repositories.person import ProjectPersonRepository
+    from data_project_manager.db.repositories.project import ProjectRepository
+    from data_project_manager.db.repositories.tag import ProjectTagRepository
+
+    conn = get_connection()
+    try:
+        project = ProjectRepository(conn).get_by_slug(slug)
+        if project is None:
+            _err_console.print(f"[bold red]Error:[/] project '{slug}' not found.")
+            raise typer.Exit(1)
+
+        pid = project["id"]
+        tags = ProjectTagRepository(conn).list_for_project(pid)
+        people = ProjectPersonRepository(conn).list_for_project(pid)
+        log = ChangeLogRepository(conn).list_for_entity("project", pid)
+
+        # Core fields table
+        table = Table(box=None, pad_edge=False, show_header=False)
+        table.add_column(style="dim", no_wrap=True)
+        table.add_column()
+
+        field_rows = [
+            ("Slug", project["slug"]),
+            ("Status", _status_text(project["status"])),
+            ("Domain", project.get("domain") or ""),
+            ("Description", project.get("description") or ""),
+            ("Template", project.get("template_used") or ""),
+            ("Git", "yes" if project.get("has_git_repo") else "no"),
+            ("Path", project.get("relative_path") or ""),
+            ("Request date", project.get("request_date") or ""),
+            ("Expected start", project.get("expected_start") or ""),
+            ("Expected end", project.get("expected_end") or ""),
+            ("Realized start", project.get("realized_start") or ""),
+            ("Realized end", project.get("realized_end") or ""),
+            ("Est. hours", str(project.get("estimated_hours") or "")),
+        ]
+        for label, value in field_rows:
+            if value and str(value):
+                table.add_row(label, value)
+
+        _console.print(
+            Panel(
+                table,
+                title=f"[bold]{project['title']}[/]",
+                expand=False,
+            )
+        )
+
+        # Tags
+        if tags:
+            tag_names = ", ".join(f"[cyan]{t['name']}[/]" for t in tags)
+            _console.print(f"[dim]Tags:[/] {tag_names}")
+
+        # People
+        if people:
+            _console.print("[dim]People:[/]")
+            for p in people:
+                full = f"{p['first_name']} {p['last_name']}"
+                _console.print(f"  {full:<24} [dim]{p['role']}[/]")
+
+        # Change log
+        if log:
+            _console.print("[dim]Change log (last 5):[/]")
+            for entry in log[-5:]:
+                ts = entry["changed_at"][:19]
+                field = entry["field_name"]
+                old = entry["old_value"] or "[dim]—[/]"
+                new = entry["new_value"] or "[dim]—[/]"
+                _console.print(f"  [dim]{ts}[/]  {field:<16}  {old} → {new}")
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
+# project update
+# ---------------------------------------------------------------------------
+
+
+@project_app.command("update")
+def project_update(
+    slug: Annotated[str, typer.Argument(help="Project slug")],
+    status: Annotated[
+        str | None, typer.Option(help="New status (active/paused/done/archived)")
+    ] = None,
+    domain: Annotated[str | None, typer.Option(help="Subject area")] = None,
+    description: Annotated[
+        str | None, typer.Option(help="Free-text description")
+    ] = None,
+    external_url: Annotated[
+        str | None, typer.Option("--external-url", help="DevOps/Trello URL")
+    ] = None,
+    tags: Annotated[
+        list[str] | None,
+        typer.Option("--tag", help="Add a tag (repeatable)"),
+    ] = None,
+    remove_tags: Annotated[
+        list[str] | None,
+        typer.Option("--remove-tag", help="Remove a tag (repeatable)"),
+    ] = None,
+) -> None:
+    """Update mutable fields on a project."""
+    from data_project_manager.db.connection import get_connection
+    from data_project_manager.db.repositories.changelog import ChangeLogRepository
+    from data_project_manager.db.repositories.project import ProjectRepository
+    from data_project_manager.db.repositories.tag import (
+        ProjectTagRepository,
+        TagRepository,
+    )
+
+    conn = get_connection()
+    try:
+        changelog = ChangeLogRepository(conn)
+        repo = ProjectRepository(conn, changelog=changelog)
+
+        project = repo.get_by_slug(slug)
+        if project is None:
+            _err_console.print(f"[bold red]Error:[/] project '{slug}' not found.")
+            raise typer.Exit(1)
+
+        pid = project["id"]
+
+        # Validate and collect scalar updates
+        updates: dict = {}
+        if status is not None:
+            valid = {"active", "paused", "done", "archived"}
+            if status not in valid:
+                _err_console.print(
+                    f"[bold red]Error:[/] invalid status '{status}'. "
+                    f"Must be one of {sorted(valid)}."
+                )
+                raise typer.Exit(1)
+            updates["status"] = status
+        if domain is not None:
+            updates["domain"] = domain
+        if description is not None:
+            updates["description"] = description
+        if external_url is not None:
+            updates["external_url"] = external_url
+
+        if updates:
+            repo.update(pid, **updates)
+
+        # Tag operations
+        tag_repo = TagRepository(conn)
+        pt_repo = ProjectTagRepository(conn)
+        for name in tags or []:
+            tag = tag_repo.create(name=name)
+            pt_repo.add(project_id=pid, tag_id=tag["id"])
+        for name in remove_tags or []:
+            tag = tag_repo.get_by_name(name)
+            if tag:
+                pt_repo.remove(project_id=pid, tag_id=tag["id"])
+
+        if not updates and not tags and not remove_tags:
+            _console.print("[dim]Nothing to update.[/]")
+            return
+
+        _console.print(f"[bold green]✓[/] Updated [cyan]{slug}[/]")
+        for key, new_val in updates.items():
+            old_val = project[key]
+            _console.print(f"  [dim]{key}:[/] {old_val} → [bold]{new_val}[/]")
+        for name in tags or []:
+            _console.print(f"  [dim]tag added:[/] [cyan]{name}[/]")
+        for name in remove_tags or []:
+            _console.print(f"  [dim]tag removed:[/] [cyan]{name}[/]")
+    finally:
+        conn.close()
 
 
 # ---------------------------------------------------------------------------
