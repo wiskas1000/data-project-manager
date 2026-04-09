@@ -55,10 +55,10 @@ successful run.
 
     # 2. Register a person and link them to the project
     person_repo = PersonRepository(conn)
-    person = person_repo.get_or_create(
-        email="analyst@example.com",
+    person = person_repo.create(
         first_name="Ana",
         last_name="García",
+        email="analyst@example.com",
         function_title="Senior Analyst",
         department="Analytics",
     )
@@ -69,19 +69,19 @@ successful run.
     )
 
     # 3. Tag the project
-    tag = TagRepository(conn).get_or_create("churn")
+    tag = TagRepository(conn).create(name="churn")
     ProjectTagRepository(conn).add(project.id, tag.id)
 
     # 4. Register an output file
-    entity_type = EntityTypeRepository(conn).get_or_create("customers")
-    agg_level = AggregationLevelRepository(conn).get_or_create("row")
+    entity_type = EntityTypeRepository(conn).create(name="customers")
+    agg_level = AggregationLevelRepository(conn).create(name="row")
 
     data_file_repo = DataFileRepository(conn)
     data_file = data_file_repo.create(
         project_id=project.id,
         file_path="data/processed/churn_scores_2026Q1.parquet",
+        file_format="parquet",
         sensitivity="client_confidential",
-        description="Model scores per customer for Q1 2026",
     )
     data_file_repo.link_entity_type(data_file.id, entity_type.id)
     data_file_repo.link_aggregation_level(data_file.id, agg_level.id)
@@ -90,9 +90,9 @@ successful run.
     deliverable_repo = DeliverableRepository(conn)
     deliverable = deliverable_repo.create(
         project_id=project.id,
-        title="Churn Score Report Q1 2026",
-        deliverable_type="report",
-        recipient="Marketing",
+        type="report",
+        file_path="results/churn_report_Q1_2026.pdf",
+        file_format="pdf",
     )
     deliverable_repo.mark_delivered(deliverable.id)
 
