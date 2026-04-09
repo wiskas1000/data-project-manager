@@ -163,14 +163,14 @@ Unit tests: search query parsing, filter combinations, FTS5 integration. Integra
 
 ### Acceptance Criteria
 
-- [ ] Sphinx docs build with full API reference for all repository classes
-- [ ] Library usage guide with real examples (data pipeline, export for LLM)
-- [ ] All CLI commands have `--help` with examples
-- [ ] Test coverage ≥ 85%
+- [x] Sphinx docs build with full API reference for all repository classes
+- [x] Library usage guide with real examples (data pipeline, export for LLM)
+- [x] All CLI commands have `--help` with examples
+- [x] Test coverage ≥ 85% (achieved 94%)
 - [ ] Cross-platform: tested on Windows + Unix
 - [ ] Zero-dep mode verified (uninstall Typer, confirm argparse works)
-- [ ] CHANGELOG complete v0.1.0 through v1.0.0
-- [ ] README: quickstart, feature overview, library API intro, install instructions
+- [x] CHANGELOG complete v0.1.0 through v1.0.0
+- [x] README: quickstart, feature overview, library API intro, install instructions
 
 ### Testing Strategy
 
@@ -195,7 +195,7 @@ Coverage sweep, edge cases (Unicode slugs, long paths, empty DB), cross-platform
 | Full Schema & Library API | v0.2.0 | 8 ✅ | All 16 tables, repository classes, folder selection redesign, v0.1.0 fixes |
 | Typed Data Model | v0.2.1 | 1 ✅ | Frozen dataclasses for all entities |
 | Search & Export | v0.3.0 | 4 ✅ | FTS5 search, JSON export, AI readiness |
-| Docs & v1 Release | v1.0.0 | 4 | Documentation, coverage, stability |
+| Docs & v1 Release | v1.0.0 | 4 ✅ | Documentation, coverage, stability |
 | **Total** | | **23** | |
 
 ## Post v1.0.0 — Build When Needed

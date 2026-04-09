@@ -7,6 +7,28 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.0.0] — 2026-04-09
+
+### Added
+
+- **Full user documentation**: quickstart guide, CLI reference with examples
+  for all commands, template/folder customisation guide, FAQ, and updated
+  library usage guide with dataclass attribute access.
+- **94% test coverage** (up from 72%): 351 tests across all layers including
+  Typer CLI, argparse fallback, entry points, config edge cases, and
+  git-init/root-resolution paths.
+- **Sphinx docs build clean** with `-W` (warnings-as-errors): full API
+  reference for all modules, usage guides, and cross-referenced type docs.
+
+### Changed
+
+- README expanded with all features (search, export, project update, info),
+  archetype table, library usage with dataclass examples, and documentation
+  links.
+- Version bumped to 1.0.0.
+
+---
+
 ## [0.3.0] — 2026-04-09
 
 ### Added
