@@ -16,3 +16,4 @@ A project launcher and metadata database for analytical work.
    api/config
    api/core
    api/db
+   api/cli
