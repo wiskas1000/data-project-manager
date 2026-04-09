@@ -140,6 +140,18 @@ def main() -> None:
         action="store_true",
         help="Export all projects",
     )
+    export_parser.add_argument(
+        "--output",
+        "-o",
+        dest="output_file",
+        metavar="FILE",
+        help="Write JSON to file instead of stdout",
+    )
+    export_parser.add_argument(
+        "--compact",
+        action="store_true",
+        help="Minified JSON (no indentation)",
+    )
 
     # config
     config_parser = subparsers.add_parser("config", help="Manage configuration")
@@ -331,16 +343,24 @@ def _handle_search(args: argparse.Namespace) -> None:
 
 def _handle_export(args: argparse.Namespace) -> None:
     """Export project metadata as JSON."""
+    from pathlib import Path
+
     from data_project_manager.core.export import export_all_json, export_project_json
 
+    pretty = not args.compact
     if args.export_all or args.slug is None:
-        print(export_all_json())
+        json_output = export_all_json(pretty=pretty)
     else:
-        output = export_project_json(args.slug)
-        if output is None:
+        json_output = export_project_json(args.slug, pretty=pretty)
+        if json_output is None:
             print(f"Error: project '{args.slug}' not found.", file=sys.stderr)
             sys.exit(1)
-        print(output)
+
+    if args.output_file:
+        Path(args.output_file).write_text(json_output + "\n", encoding="utf-8")
+        print(f"Exported to {args.output_file}")
+    else:
+        print(json_output)
 
 
 def _handle_info(args: argparse.Namespace) -> None:
