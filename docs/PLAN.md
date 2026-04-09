@@ -59,30 +59,32 @@ Unit tests: config loading, slug generation (Unicode, spaces, capitalization), f
 
 ---
 
-## Milestone 2: Full Schema & Library API — `v0.2.0`
+## Milestone 2: Full Schema & Library API — `v0.2.0` ✅
 
 **Summary**: All 16 tables exist in the database. All repository classes are available as a Python API. Data pipelines and future integrations can now import and use the repository layer. `datapm info` gives a formatted view of any project's full metadata. Folder selection is redesigned with archetypes and interactive toggles.
 
+**Status**: Released and tagged. 8 PRs merged (#21–#31).
+
 ### Acceptance Criteria
 
-- [ ] All 16 tables from ARCHITECTURE.md exist (schema migration 2)
-- [ ] Repository classes exist for every entity group with create/get/list/update/delete
-- [ ] `from data_project_manager.db.repositories.data_file import DataFileRepository` works
-- [ ] A data pipeline script can register a file, a person, a tag via the Python API
-- [ ] Person repository supports SCD2 versioning (create_new_version sets valid_to on old record)
-- [ ] Basic `datapm project update` command works (status, description, domain, tags)
-- [ ] `datapm info <project-slug>` shows all metadata for a project in a formatted view
-- [ ] Seed data for common EntityType and AggregationLevel values
-- [ ] All repository classes have full test coverage
-- [ ] API usage is documented with examples
-- [ ] Folder selection redesigned: archetype picker + interactive toggles (see `docs/FOLDER-SELECTION-DESIGN.md`)
-- [ ] Git init moved to `src/` (OneDrive compatibility)
-- [ ] `archief/` removed from auto-created folders
-- [ ] Custom templates supported via config
-- [ ] Slug collision handled with user-friendly error (#14)
-- [ ] DB connections properly closed (#15)
-- [ ] Column whitelist in `ProjectRepository.update()` (#16)
-- [ ] Sphinx docstring warning fixed (#17)
+- [x] All 16 tables from ARCHITECTURE.md exist (schema migration 2)
+- [x] Repository classes exist for every entity group with create/get/list/update/delete
+- [x] `from data_project_manager.db.repositories.data_file import DataFileRepository` works
+- [x] A data pipeline script can register a file, a person, a tag via the Python API
+- [x] Person repository supports SCD2 versioning (create_new_version sets valid_to on old record)
+- [x] Basic `datapm project update` command works (status, description, domain, tags)
+- [x] `datapm info <project-slug>` shows all metadata for a project in a formatted view
+- [x] Seed data for common EntityType and AggregationLevel values
+- [x] All repository classes have full test coverage
+- [x] API usage is documented with examples
+- [x] Folder selection redesigned: archetype picker + interactive toggles (see `docs/FOLDER-SELECTION-DESIGN.md`)
+- [x] Git init moved to `src/` (OneDrive compatibility)
+- [x] `archief/` removed from auto-created folders
+- [x] Custom templates supported via config
+- [x] Slug collision handled with user-friendly error (#14)
+- [x] DB connections properly closed (#15)
+- [x] Column whitelist in `ProjectRepository.update()` (#16)
+- [x] Sphinx docstring warning fixed (#17)
 
 ### Testing Strategy
 
@@ -100,6 +102,27 @@ Unit tests for every repository class: CRUD operations, M:N junction management,
 | 6 | `feat/changelog` | S | `db/repositories/changelog.py`: ChangeLog recording. Hook into repository update methods. |
 | 7 | `feat/project-update-info` | S | Argparse: `project update` (status, domain, tags, external_url) and `info <slug>` (formatted metadata view). Validates inputs. |
 | 8 | `docs/api-usage` | M | Sphinx autodoc for all repository classes. Usage examples: how a data pipeline imports and writes to the DB. |
+
+---
+
+## Milestone 2.1: Typed Data Model — `v0.2.1` ✅
+
+**Summary**: Replace plain `dict` returns across all 16 repository classes with frozen `dataclasses`. Zero-dependency (stdlib since Python 3.7). Typed attributes, IDE autocompletion, and elimination of all `# type: ignore` comments.
+
+**Status**: Released and tagged. 1 PR merged (#32).
+
+### What changed
+
+- New `db/models/` package — one file per entity, 13 frozen dataclasses with `from_row()` classmethods
+- All repository return types updated from `dict[str, Any]` to typed models
+- CLI handlers and tests migrated to attribute access (`.field` instead of `["field"]`)
+- `db/models/__init__.py` re-exports all types for convenient imports
+
+### Pull Requests
+
+| # | Branch | Size | Description |
+|---|--------|------|-------------|
+| 1 | `refactor/dataclasses` | L | Frozen dataclasses for all entities, update repos + CLI + tests. |
 
 ---
 
@@ -167,10 +190,11 @@ Coverage sweep, edge cases (Unicode slugs, long paths, empty DB), cross-platform
 | Milestone | Tag | PRs | Focus |
 |-----------|-----|-----|-------|
 | Launcher | v0.1.0 | 6 ✅ | `datapm new`, config, DB foundation |
-| Full Schema & Library API | v0.2.0 | 8 | All 16 tables, repository classes, folder selection redesign, v0.1.0 fixes |
+| Full Schema & Library API | v0.2.0 | 8 ✅ | All 16 tables, repository classes, folder selection redesign, v0.1.0 fixes |
+| Typed Data Model | v0.2.1 | 1 ✅ | Frozen dataclasses for all entities |
 | Search & Export | v0.3.0 | 4 | FTS5 search, JSON export, AI readiness |
 | Docs & v1 Release | v1.0.0 | 4 | Documentation, coverage, stability |
-| **Total** | | **22** | |
+| **Total** | | **23** | |
 
 ## Post v1.0.0 — Build When Needed
 

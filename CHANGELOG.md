@@ -7,6 +7,70 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.2.1] — 2026-04-09
+
+### Changed
+
+- **Typed data model**: all 16 repository classes now return frozen
+  `dataclasses` instead of plain `dict[str, Any]`. New `db/models/`
+  package with one file per entity (Project, Person, Tag, DataFile,
+  Deliverable, Query, RequestQuestion, ChangeLogEntry, and composite
+  types PersonWithRole, ProjectPersonLink).
+- Each model has a `from_row()` classmethod for `sqlite3.Row` conversion
+  and proper `bool` coercion for SQLite integer flags.
+- `db/models/__init__.py` re-exports all 13 types for convenience:
+  `from data_project_manager.db.models import Project, Person, Tag`
+- Eliminated all 16 `# type: ignore[return-value]` comments across
+  repositories.
+- CLI handlers updated from `project["id"]` to `project.id` style
+  throughout both Typer and argparse implementations.
+
+---
+
+## [0.2.0] — 2026-04-09
+
+### Added
+
+- Schema migration 2: all remaining 14 tables (Person with SCD2 fields,
+  Tag, DataFile, Query, Deliverable, RequestQuestion, ChangeLog,
+  EntityType, AggregationLevel, and all junction tables). Seed data for
+  common entity types and aggregation levels.
+- Repository classes for every entity group: `person.py` (Person SCD2 +
+  ProjectPerson), `tag.py` (Tag + ProjectTag), `data_file.py` (DataFile +
+  EntityType + AggregationLevel + junctions), `deliverable.py`,
+  `query.py`, `question.py`, `changelog.py`.
+- ChangeLog audit trail: field-level change recording hooked into
+  `ProjectRepository.update()` and `PersonRepository.create_new_version()`
+  via optional constructor injection.
+- `datapm project update <slug>` — update status, domain, description,
+  external URL, add/remove tags.
+- `datapm info <slug>` — formatted metadata view with tags, people,
+  and change history.
+- Sphinx autodoc for all 8 repository files. Library usage guide
+  (`docs/usage/library.rst`) with full data-pipeline example.
+- Shared `_helpers.py` module with `now_iso()` and `row_to_dict()`
+  extracted from all repository files.
+- Shared `tests/helpers.py` with `fresh_conn()` and `make_project()`
+  test utilities.
+- 215 passing tests across all layers.
+
+### Changed
+
+- Folder selection redesigned: archetype picker (minimal, analysis,
+  modeling, reporting, research, full) with interactive folder toggles.
+  Dutch canonical names. Git init moved to `src/` for OneDrive
+  compatibility. `archief/` removed from auto-created folders.
+- Custom templates supported via `config.json`.
+
+### Fixed
+
+- Slug collision now raises a user-friendly `ValueError` (#14)
+- DB connections properly closed with `try/finally` pattern (#15)
+- `ProjectRepository.update()` validates column whitelist (#16)
+- Sphinx docstring indentation warning in `db.schema` (#17)
+
+---
+
 ## [0.1.0] — 2026-04-07
 
 ### Added
