@@ -102,7 +102,30 @@ def main() -> None:
 
     # search
     search_parser = subparsers.add_parser("search", help="Search projects by metadata")
-    search_parser.add_argument("query", help="Search query")
+    search_parser.add_argument("query", nargs="?", help="Free-text search query")
+    search_parser.add_argument("--domain", help="Filter by domain")
+    search_parser.add_argument(
+        "--status", help="Filter by status (active/paused/done/archived)"
+    )
+    search_parser.add_argument(
+        "--tag",
+        dest="tags",
+        action="append",
+        metavar="NAME",
+        help="Filter by tag (repeatable, all must match)",
+    )
+    search_parser.add_argument(
+        "--from",
+        dest="date_from",
+        metavar="DATE",
+        help="Only projects created on or after this ISO date",
+    )
+    search_parser.add_argument(
+        "--to",
+        dest="date_to",
+        metavar="DATE",
+        help="Only projects created on or before this ISO date",
+    )
 
     # config
     config_parser = subparsers.add_parser("config", help="Manage configuration")
@@ -129,7 +152,7 @@ def main() -> None:
     elif args.command == "project":
         _handle_project(args, project_parser)
     elif args.command == "search":
-        print(f"Searching for: {args.query}")
+        _handle_search(args)
     elif args.command == "config":
         _handle_config(args, config_parser)
 
@@ -252,6 +275,42 @@ def _handle_list(args: argparse.Namespace) -> None:
     print("-" * len(header))
     for p in projects:
         print(f"{p.slug:<{col_slug}}  {p.status:<{col_status}}  {p.title}")
+
+
+def _handle_search(args: argparse.Namespace) -> None:
+    """Search projects by text and/or structured filters."""
+    from data_project_manager.core.search import search_projects
+
+    if not any(
+        [args.query, args.domain, args.status, args.tags, args.date_from, args.date_to]
+    ):
+        print("Error: provide a search query or at least one filter.", file=sys.stderr)
+        sys.exit(1)
+
+    results = search_projects(
+        args.query,
+        domain=args.domain,
+        status=args.status,
+        tags=args.tags,
+        date_from=args.date_from,
+        date_to=args.date_to,
+    )
+
+    if not results:
+        print("No projects found.")
+        return
+
+    col_slug = max(len(r.slug) for r in results)
+    col_status = max(len(r.status) for r in results)
+    col_slug = max(col_slug, 4)
+    col_status = max(col_status, 6)
+
+    print(f"Found {len(results)} project(s):\n")
+    header = f"{'SLUG':<{col_slug}}  {'STATUS':<{col_status}}  TITLE"
+    print(header)
+    print("-" * len(header))
+    for r in results:
+        print(f"{r.slug:<{col_slug}}  {r.status:<{col_status}}  {r.title}")
 
 
 def _handle_info(args: argparse.Namespace) -> None:
