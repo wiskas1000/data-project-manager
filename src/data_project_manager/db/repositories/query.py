@@ -13,9 +13,9 @@ Example::
 
 import sqlite3
 import uuid
-from typing import Any
 
-from data_project_manager.db.repositories._helpers import now_iso, row_to_dict
+from data_project_manager.db.models.query import Query
+from data_project_manager.db.repositories._helpers import now_iso
 
 
 class QueryRepository:
@@ -38,8 +38,8 @@ class QueryRepository:
         source_file_id: str | None = None,
         sensitivity: str | None = None,
         executed_at: str | None = None,
-    ) -> dict[str, Any]:
-        """Insert a new query record and return it as a dict.
+    ) -> Query:
+        """Insert a new query record and return it.
 
         Args:
             query_path: Path to the query file (e.g. ``"queries/ltv.sql"``).
@@ -50,7 +50,7 @@ class QueryRepository:
             executed_at: ISO datetime of the most recent execution.
 
         Returns:
-            The newly created query as a dict.
+            The newly created :class:`Query`.
         """
         query_id = str(uuid.uuid4())
         with self._conn:
@@ -71,39 +71,41 @@ class QueryRepository:
                     executed_at,
                 ),
             )
-        return self.get(query_id)  # type: ignore[return-value]
+        result = self.get(query_id)
+        assert result is not None
+        return result
 
-    def get(self, query_id: str) -> dict[str, Any] | None:
+    def get(self, query_id: str) -> Query | None:
         """Fetch a query by UUID.
 
         Args:
             query_id: UUID primary key.
 
         Returns:
-            Query dict, or ``None`` if not found.
+            :class:`Query`, or ``None`` if not found.
         """
         row = self._conn.execute(
             "SELECT * FROM query WHERE id = ?", (query_id,)
         ).fetchone()
-        return row_to_dict(row)
+        return Query.from_row(row) if row is not None else None
 
-    def list(self) -> list[dict[str, Any]]:
+    def list(self) -> list[Query]:
         """Return all query records ordered by query path.
 
         Returns:
-            List of query dicts.
+            List of :class:`Query` instances.
         """
         rows = self._conn.execute("SELECT * FROM query ORDER BY query_path").fetchall()
-        return [dict(r) for r in rows]
+        return [Query.from_row(r) for r in rows]
 
-    def mark_executed(self, query_id: str) -> dict[str, Any]:
+    def mark_executed(self, query_id: str) -> Query:
         """Set ``executed_at`` to now.
 
         Args:
             query_id: UUID of the query to mark.
 
         Returns:
-            The updated query dict.
+            The updated :class:`Query`.
 
         Raises:
             ValueError: If the query does not exist.
@@ -115,4 +117,6 @@ class QueryRepository:
             )
             if cursor.rowcount == 0:
                 raise ValueError(f"Query {query_id!r} not found.")
-        return self.get(query_id)  # type: ignore[return-value]
+        result = self.get(query_id)
+        assert result is not None
+        return result

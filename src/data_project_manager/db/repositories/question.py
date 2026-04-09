@@ -17,9 +17,8 @@ Example::
 
 import sqlite3
 import uuid
-from typing import Any
 
-from data_project_manager.db.repositories._helpers import row_to_dict
+from data_project_manager.db.models.question import RequestQuestion
 
 
 class RequestQuestionRepository:
@@ -44,8 +43,8 @@ class RequestQuestionRepository:
         question_text: str,
         data_period_from: str | None = None,
         data_period_to: str | None = None,
-    ) -> dict[str, Any]:
-        """Insert a new request question and return it as a dict.
+    ) -> RequestQuestion:
+        """Insert a new request question and return it.
 
         Args:
             project_id: UUID of the owning project.
@@ -54,7 +53,7 @@ class RequestQuestionRepository:
             data_period_to: ISO date for the end of the data period.
 
         Returns:
-            The newly created request question as a dict.
+            The newly created :class:`RequestQuestion`.
         """
         question_id = str(uuid.uuid4())
         with self._conn:
@@ -73,33 +72,36 @@ class RequestQuestionRepository:
                     data_period_to,
                 ),
             )
-        return self.get(question_id)  # type: ignore[return-value]
+        result = self.get(question_id)
+        assert result is not None
+        return result
 
-    def get(self, question_id: str) -> dict[str, Any] | None:
+    def get(self, question_id: str) -> RequestQuestion | None:
         """Fetch a request question by UUID.
 
         Args:
             question_id: UUID primary key.
 
         Returns:
-            Request question dict, or ``None`` if not found.
+            :class:`RequestQuestion`, or ``None`` if not found.
         """
         row = self._conn.execute(
             "SELECT * FROM request_question WHERE id = ?", (question_id,)
         ).fetchone()
-        return row_to_dict(row)
+        return RequestQuestion.from_row(row) if row is not None else None
 
-    def list_for_project(self, project_id: str) -> list[dict[str, Any]]:
+    def list_for_project(self, project_id: str) -> list[RequestQuestion]:
         """Return all request questions for a project.
 
         Args:
             project_id: UUID of the project.
 
         Returns:
-            List of request question dicts ordered by insertion order.
+            List of :class:`RequestQuestion` instances ordered by
+            insertion order.
         """
         rows = self._conn.execute(
             "SELECT * FROM request_question WHERE project_id = ? ORDER BY rowid",
             (project_id,),
         ).fetchall()
-        return [dict(r) for r in rows]
+        return [RequestQuestion.from_row(r) for r in rows]

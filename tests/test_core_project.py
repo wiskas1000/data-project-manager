@@ -467,4 +467,4 @@ def test_list_projects_filter_domain(project_env: tuple[Path, Path]) -> None:
     create_project("B", domain="finance", db_path=db, root_path_override=root)
     results = list_projects(domain="healthcare", db_path=db)
     assert len(results) == 1
-    assert results[0]["domain"] == "healthcare"
+    assert results[0].domain == "healthcare"

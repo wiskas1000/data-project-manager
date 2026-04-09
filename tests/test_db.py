@@ -111,11 +111,11 @@ def test_root_create_and_get() -> None:
     conn = fresh_conn()
     repo = ProjectRootRepository(conn)
     root = repo.create(name="work", absolute_path="/projects/work")
-    assert root["name"] == "work"
-    assert root["absolute_path"] == "/projects/work"
-    assert root["is_default"] == 0
+    assert root.name == "work"
+    assert root.absolute_path == "/projects/work"
+    assert root.is_default == 0
 
-    fetched = repo.get(root["id"])
+    fetched = repo.get(root.id)
     assert fetched == root
 
 
@@ -125,7 +125,7 @@ def test_root_get_by_name() -> None:
     repo.create(name="work", absolute_path="/projects/work")
     root = repo.get_by_name("work")
     assert root is not None
-    assert root["name"] == "work"
+    assert root.name == "work"
 
 
 def test_root_get_by_name_missing() -> None:
@@ -140,7 +140,7 @@ def test_root_list() -> None:
     repo.create(name="work", absolute_path="/projects/work")
     roots = repo.list()
     assert len(roots) == 2
-    assert roots[0]["name"] == "personal"  # ordered by name
+    assert roots[0].name == "personal"  # ordered by name
 
 
 def test_root_set_default() -> None:
@@ -148,9 +148,9 @@ def test_root_set_default() -> None:
     repo = ProjectRootRepository(conn)
     r1 = repo.create(name="work", absolute_path="/projects/work", is_default=True)
     r2 = repo.create(name="personal", absolute_path="/projects/personal")
-    repo.set_default(r2["id"])
-    assert repo.get(r1["id"])["is_default"] == 0
-    assert repo.get(r2["id"])["is_default"] == 1
+    repo.set_default(r2.id)
+    assert repo.get(r1.id).is_default is False
+    assert repo.get(r2.id).is_default is True
 
 
 def test_root_get_default_none() -> None:
@@ -162,7 +162,7 @@ def test_root_get_default() -> None:
     conn = fresh_conn()
     repo = ProjectRootRepository(conn)
     root = repo.create(name="work", absolute_path="/p/work", is_default=True)
-    assert repo.get_default()["id"] == root["id"]
+    assert repo.get_default().id == root.id
 
 
 # ---------------------------------------------------------------------------
@@ -174,12 +174,12 @@ def test_project_create_and_get() -> None:
     conn = fresh_conn()
     repo = ProjectRepository(conn)
     p = repo.create(title="Churn analysis", slug="2026-04-06-churn-analysis")
-    assert p["title"] == "Churn analysis"
-    assert p["slug"] == "2026-04-06-churn-analysis"
-    assert p["status"] == "active"
-    assert p["is_adhoc"] == 0
+    assert p.title == "Churn analysis"
+    assert p.slug == "2026-04-06-churn-analysis"
+    assert p.status == "active"
+    assert p.is_adhoc == 0
 
-    fetched = repo.get(p["id"])
+    fetched = repo.get(p.id)
     assert fetched == p
 
 
@@ -189,7 +189,7 @@ def test_project_get_by_slug() -> None:
     repo.create(title="T", slug="2026-01-01-t")
     p = repo.get_by_slug("2026-01-01-t")
     assert p is not None
-    assert p["title"] == "T"
+    assert p.title == "T"
 
 
 def test_project_get_missing() -> None:
@@ -225,16 +225,16 @@ def test_project_list_filter_domain() -> None:
     repo = ProjectRepository(conn)
     repo.create(title="A", slug="s-a", domain="healthcare")
     repo.create(title="B", slug="s-b", domain="finance")
-    assert repo.list(domain="healthcare")[0]["title"] == "A"
+    assert repo.list(domain="healthcare")[0].title == "A"
 
 
 def test_project_update_status() -> None:
     conn = fresh_conn()
     repo = ProjectRepository(conn)
     p = repo.create(title="T", slug="s")
-    updated = repo.update(p["id"], status="done")
-    assert updated["status"] == "done"
-    assert updated["updated_at"] > p["updated_at"]
+    updated = repo.update(p.id, status="done")
+    assert updated.status == "done"
+    assert updated.updated_at > p.updated_at
 
 
 def test_project_update_invalid_status() -> None:
@@ -242,7 +242,7 @@ def test_project_update_invalid_status() -> None:
     repo = ProjectRepository(conn)
     p = repo.create(title="T", slug="s")
     with pytest.raises(ValueError, match="Invalid status"):
-        repo.update(p["id"], status="bad")
+        repo.update(p.id, status="bad")
 
 
 def test_project_update_missing_id() -> None:
@@ -255,8 +255,8 @@ def test_project_update_no_fields() -> None:
     conn = fresh_conn()
     repo = ProjectRepository(conn)
     p = repo.create(title="T", slug="s")
-    result = repo.update(p["id"])
-    assert result == repo.get(p["id"])
+    result = repo.update(p.id)
+    assert result == repo.get(p.id)
 
 
 def test_project_create_duplicate_slug_raises_value_error() -> None:
@@ -272,11 +272,11 @@ def test_project_update_rejects_immutable_columns() -> None:
     repo = ProjectRepository(conn)
     p = repo.create(title="T", slug="s")
     with pytest.raises(ValueError, match="immutable or unknown"):
-        repo.update(p["id"], id="new-id")
+        repo.update(p.id, id="new-id")
     with pytest.raises(ValueError, match="immutable or unknown"):
-        repo.update(p["id"], created_at="2020-01-01")
+        repo.update(p.id, created_at="2020-01-01")
     with pytest.raises(ValueError, match="immutable or unknown"):
-        repo.update(p["id"], slug="new-slug")
+        repo.update(p.id, slug="new-slug")
 
 
 def test_project_update_rejects_unknown_columns() -> None:
@@ -284,7 +284,7 @@ def test_project_update_rejects_unknown_columns() -> None:
     repo = ProjectRepository(conn)
     p = repo.create(title="T", slug="s")
     with pytest.raises(ValueError, match="immutable or unknown"):
-        repo.update(p["id"], nonexistent_field="value")
+        repo.update(p.id, nonexistent_field="value")
 
 
 def test_project_with_root_fk() -> None:
@@ -292,6 +292,6 @@ def test_project_with_root_fk() -> None:
     root_repo = ProjectRootRepository(conn)
     proj_repo = ProjectRepository(conn)
     root = root_repo.create(name="work", absolute_path="/p/work")
-    p = proj_repo.create(title="T", slug="s", root_id=root["id"])
-    assert p["root_id"] == root["id"]
-    assert len(proj_repo.list(root_id=root["id"])) == 1
+    p = proj_repo.create(title="T", slug="s", root_id=root.id)
+    assert p.root_id == root.id
+    assert len(proj_repo.list(root_id=root.id)) == 1

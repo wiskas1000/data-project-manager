@@ -2,6 +2,7 @@
 
 import sqlite3
 
+from data_project_manager.db.models.project import Project
 from data_project_manager.db.repositories.project import ProjectRepository
 from data_project_manager.db.schema import migrate
 
@@ -15,7 +16,7 @@ def fresh_conn() -> sqlite3.Connection:
     return conn
 
 
-def make_project(conn: sqlite3.Connection, title: str = "Test") -> dict:
+def make_project(conn: sqlite3.Connection, title: str = "Test") -> Project:
     """Create a minimal project and return it."""
     return ProjectRepository(conn).create(
         title=title,
