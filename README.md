@@ -7,17 +7,27 @@ structured metadata to a local SQLite database. The database can also be
 imported directly by data pipelines, scanners, and dashboards via the
 Python repository API.
 
-## Features (v0.1.0)
+## Features
 
 - **`datapm new`** — interactive or one-liner project creation; scaffolds
-  dated folders with standard Dutch subfolders, writes `project.json`,
+  dated folders with archetype-based subfolders, writes `project.json`,
   and optionally runs `git init`
 - **`datapm list`** — tabular view of all projects with status and domain
-- **`datapm config init`** — creates `~/.datapm/config.json` with sensible
-  defaults
+- **`datapm info`** — full metadata for a single project including tags,
+  people, and changelog
+- **`datapm search`** — FTS5-powered full-text search with structured
+  filters (domain, status, tags, date range)
+- **`datapm export`** — structured JSON export for LLM context or
+  downstream tools
+- **`datapm project update`** — update status, domain, tags with
+  automatic changelog
+- **`datapm config init`** — creates `~/.datapm/config.json` with
+  sensible defaults
 - **Zero runtime dependencies** — core and DB layers use stdlib only
 - **Enhanced mode** — install `typer` for Rich-formatted, colour-coded
   terminal output
+- **Python library** — import repository classes directly from data
+  pipelines and scripts
 
 ## Requirements
 
@@ -49,12 +59,19 @@ datapm config init
 # 2 — Create a project interactively
 datapm new
 
-# 2b — One-liner
-datapm new "Churn analysis" --domain marketing --folder data --folder notebooks --git
+# 2b — One-liner with archetype
+datapm new "Churn Analysis" --domain marketing --type analysis --no-git
 
-# 3 — List all projects
-datapm list
-datapm list --status active --domain marketing
+# 3 — List and search
+datapm list --status active
+datapm search "churn" --domain marketing
+
+# 4 — View details and export
+datapm info 2026-04-09-churn-analysis
+datapm export 2026-04-09-churn-analysis
+
+# 5 — Update metadata
+datapm project update 2026-04-09-churn-analysis --status done --tag ml
 
 # Zero-dependency fallback (no Typer needed)
 python -m data_project_manager new "My Project"
@@ -63,28 +80,37 @@ python -m data_project_manager new "My Project"
 ## Project folder layout
 
 ```
-2026-04-07_Churn-Analysis/
-├── archief/
+2026-04-09_Churn-Analysis/
 ├── communicatie/
 ├── documenten/
+├── data/
+│   ├── raw/
+│   ├── processed/
+│   └── metadata/
+├── src/
+│   └── queries/
 ├── project.json          ← metadata snapshot (DB is source of truth)
-└── .gitignore            ← present when --git is used
+└── src/.git/             ← present when --git is used
 ```
 
-Optional folder groups added via `--folder`:
+Folder structure is controlled by **archetypes** (`--type`):
 
-| Key | Creates |
-|-----|---------|
-| `data` | `data/raw/`, `data/processed/`, `data/metadata/` |
-| `src` | `src/queries/` |
-| `literatuur` | `literatuur/` |
-| `resultaten` | `resultaten/export/`, `resultaten/figuren/` |
-| `notebooks` | `notebooks/` |
+| Archetype | Folders |
+|-----------|---------|
+| `minimal` | base only |
+| `analysis` | data, src |
+| `modeling` | data, src, models |
+| `reporting` | data, src, resultaten |
+| `research` | data, src, literatuur |
+| `full` | everything |
+
+See [docs/usage/templates.rst](docs/usage/templates.rst) for custom
+templates and folder language configuration.
 
 ## Using as a library
 
-Other scripts can import the repository classes to read/write project data
-without going through the CLI:
+Other scripts can import the repository classes to read/write project
+data without going through the CLI:
 
 ```python
 from data_project_manager.db.connection import get_connection
@@ -93,14 +119,15 @@ from data_project_manager.db.repositories.project import ProjectRepository
 conn = get_connection()           # reads ~/.datapm/config.json
 repo = ProjectRepository(conn)
 projects = repo.list(status="active", domain="healthcare")
+for p in projects:
+    print(p.slug, p.title, p.status)
 ```
 
-`get_connection()` accepts an explicit `db_path` argument — useful in
-scripts and tests:
+All repositories return **frozen dataclasses** with typed attributes
+(`project.id`, `project.slug`).
 
-```python
-conn = get_connection("/path/to/my.db")
-```
+See [docs/usage/library.rst](docs/usage/library.rst) for a full
+pipeline example covering files, people, tags, and deliverables.
 
 ## Configuration
 
@@ -112,7 +139,7 @@ conn = get_connection("/path/to/my.db")
   "roots": {
     "work": { "path": "/home/user/projects/work" }
   },
-  "defaults": { "template": "minimal", "git_init": true, "sensitivity": "internal" },
+  "defaults": { "template": "analysis", "git_init": true, "sensitivity": "internal" },
   "preferences": { "folder_language": "nl" }
 }
 ```
@@ -146,16 +173,33 @@ make clean      # remove caches and build artifacts
 make help       # list all targets
 ```
 
+## Documentation
+
+Full Sphinx documentation with API reference:
+
+```bash
+make docs       # builds to docs/_build/html/
+```
+
+- [Quickstart](docs/usage/quickstart.rst)
+- [CLI Reference](docs/usage/cli.rst)
+- [Library API Guide](docs/usage/library.rst)
+- [Templates & Folders](docs/usage/templates.rst)
+- [FAQ](docs/usage/faq.rst)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Project Plan](docs/PLAN.md)
+
 ## Roadmap
 
 See [docs/PLAN.md](docs/PLAN.md) for the full milestone plan.
 
 | Milestone | Tag | Focus |
 |-----------|-----|-------|
-| Launcher | **v0.1.0** | `datapm new`, config, DB foundation ✓ |
+| Launcher | v0.1.0 | `datapm new`, config, DB foundation |
 | Full Schema & Library API | v0.2.0 | All 16 tables, repository classes, Python API |
+| Typed Data Model | v0.2.1 | Frozen dataclasses for all entities |
 | Search & Export | v0.3.0 | FTS5 search, JSON export |
-| Docs & v1 Release | v1.0.0 | Coverage, documentation, stability |
+| Docs & v1 Release | **v1.0.0** | Coverage, documentation, stability |
 
 ## License
 
