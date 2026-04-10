@@ -157,9 +157,11 @@ Unit tests: search query parsing, filter combinations, FTS5 integration. Integra
 
 ---
 
-## Milestone 4: Documentation, Stability & v1 Release — `v1.0.0`
+## Milestone 4: Documentation, Stability & v1 Release — `v1.0.0` ✅
 
 **Summary**: Complete docs, comprehensive tests, cross-platform verification, first stable release.
+
+**Status**: Released and tagged.
 
 ### Acceptance Criteria
 
@@ -187,6 +189,31 @@ Coverage sweep, edge cases (Unicode slugs, long paths, empty DB), cross-platform
 
 ---
 
+## Milestone 5: Interactive UX — `v1.1.0` ✅
+
+**Summary**: Arrow-key navigation for archetype selection and folder toggles, confirmation countdown with abort, and consistent interactive behaviour across both Rich and argparse CLIs.
+
+**Status**: Released and tagged.
+
+### What changed
+
+- [x] Arrow-key pickers for archetype selection and folder toggles (Rich CLI)
+- [x] Number quick-pick (1–6) alongside arrow navigation in archetype picker
+- [x] 3-second confirmation countdown after folder selection (Enter to skip, Esc/q to abort)
+- [x] Same interactive pickers in argparse fallback CLI
+- [x] Fixed Rich `MarkupError` on non-default archetypes (empty style tags)
+- [x] Tests skip gracefully when Typer is not installed
+- [x] UX documentation updated: FOLDER-SELECTION-DESIGN.md, CLI reference, quickstart, templates guide, FAQ
+
+### Pull Requests
+
+| # | Branch | Size | Description |
+|---|--------|------|-------------|
+| 1 | `fix/rich-markup-archetype-picker` | L | Arrow-key pickers, ANSI redraw, countdown, argparse fallback, docs. |
+| 2 | `chore/v1.1.0-release` | S | Version bump, CHANGELOG. |
+
+---
+
 ## Summary
 
 | Milestone | Tag | PRs | Focus |
@@ -196,7 +223,8 @@ Coverage sweep, edge cases (Unicode slugs, long paths, empty DB), cross-platform
 | Typed Data Model | v0.2.1 | 1 ✅ | Frozen dataclasses for all entities |
 | Search & Export | v0.3.0 | 4 ✅ | FTS5 search, JSON export, AI readiness |
 | Docs & v1 Release | v1.0.0 | 4 ✅ | Documentation, coverage, stability |
-| **Total** | | **23** | |
+| Interactive UX | v1.1.0 | 2 ✅ | Arrow-key pickers, countdown, argparse parity |
+| **Total** | | **25** | |
 
 ## Post v1.0.0 — Build When Needed
 
