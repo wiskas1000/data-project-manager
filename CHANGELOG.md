@@ -7,6 +7,24 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.1.1] — 2026-04-10
+
+### Added
+
+- **`--redact` flag** on `datapm export` — replaces names and emails with
+  `[REDACTED]` in JSON output. Works in both Rich and argparse CLIs.
+- **Privacy section** in README documenting that the database contains
+  personal data.
+
+### Fixed
+
+- Folder toggle display: `src/notebooks/` and `src/queries/` now appear
+  directly below `src/` instead of at the bottom of the list.
+- Folder toggle dependency: deselecting `src/` cascades to subfolders;
+  selecting a subfolder auto-selects `src/`.
+
+---
+
 ## [1.1.0] — 2026-04-10
 
 ### Added
