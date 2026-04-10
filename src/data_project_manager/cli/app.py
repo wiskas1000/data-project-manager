@@ -579,8 +579,64 @@ def _prompt_archetype_rich(default_key: str = "analysis") -> str:
     return default_key
 
 
+def _read_key() -> str:
+    """Read a single keypress. Returns 'up', 'down', 'space', 'enter', or ''."""
+    try:
+        import termios
+        import tty
+    except ImportError:
+        return ""
+    fd = sys.stdin.fileno()
+    old = termios.tcgetattr(fd)
+    try:
+        tty.setraw(fd)
+        ch = sys.stdin.read(1)
+        if ch == "\x1b":
+            if sys.stdin.read(1) == "[":
+                arrow = sys.stdin.read(1)
+                return {"A": "up", "B": "down"}.get(arrow, "")
+            return ""
+        if ch == " ":
+            return "space"
+        if ch in ("\r", "\n"):
+            return "enter"
+        if ch == "\x03":
+            raise KeyboardInterrupt
+        return ""
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old)
+
+
+def _read_key_timeout(timeout: float) -> str | None:
+    """Read a keypress with timeout. Returns None on timeout."""
+    import select
+
+    try:
+        import termios
+        import tty
+    except ImportError:
+        return None
+    fd = sys.stdin.fileno()
+    old = termios.tcgetattr(fd)
+    try:
+        tty.setraw(fd)
+        ready, _, _ = select.select([sys.stdin], [], [], timeout)
+        if not ready:
+            return None
+        ch = sys.stdin.read(1)
+        if ch in ("\r", "\n"):
+            return "enter"
+        if ch == "\x03":
+            raise KeyboardInterrupt
+        return ch
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old)
+
+
 def _prompt_folder_toggles_rich(current: list[str]) -> list[str]:
-    """Show Rich-formatted folder toggles."""
+    """Interactive folder picker with arrow keys, Space, and Enter."""
+    from rich.live import Live
+
     from data_project_manager.core.templates import (
         OPTIONAL_FOLDERS,
         SRC_TOGGLES,
@@ -589,6 +645,82 @@ def _prompt_folder_toggles_rich(current: list[str]) -> list[str]:
 
     display_order = [f for f in OPTIONAL_FOLDERS if f not in SRC_TOGGLES] + SRC_TOGGLES
     selected = set(current)
+    cursor = 0
+
+    # Fall back to number-based input when stdin is not a real terminal
+    # (e.g. piped input, test runners, Windows without tty support).
+    try:
+        import termios as _termios  # noqa: F401
+
+        interactive = sys.stdin.isatty()
+    except ImportError:
+        interactive = False
+
+    if not interactive:
+        return _prompt_folder_toggles_numbered(display_order, selected)
+
+    def build_display(*, show_cursor: bool = True) -> Text:
+        t = Text()
+        t.append("Folders", style="bold")
+        t.append("  ↑↓ move · Space toggle · Enter confirm\n", style="dim")
+        for i, key in enumerate(display_order):
+            is_cur = show_cursor and i == cursor
+            indent = "    " if key in SRC_TOGGLES else ""
+            label = f"src/{key}/" if key in SRC_TOGGLES else f"{key}/"
+            t.append("  ❯ " if is_cur else "    ", style="bold cyan" if is_cur else "")
+            t.append(
+                "✓" if key in selected else "○",
+                style="green" if key in selected else "dim",
+            )
+            style = "bold" if is_cur else ""
+            padded = f" {indent}{label}"
+            if style:
+                t.append(padded, style=style)
+            else:
+                t.append(padded)
+            if i < len(display_order) - 1:
+                t.append("\n")
+        return t
+
+    _console.print()
+    with Live(
+        build_display(), console=_console, refresh_per_second=15, transient=True
+    ) as live:
+        while True:
+            key = _read_key()
+            if key == "up" and cursor > 0:
+                cursor -= 1
+            elif key == "down" and cursor < len(display_order) - 1:
+                cursor += 1
+            elif key == "space":
+                selected.symmetric_difference_update({display_order[cursor]})
+            elif key == "enter":
+                live.update(build_display(show_cursor=False))
+                break
+            live.update(build_display())
+
+    result = resolve_folders(sorted(selected))
+
+    # Confirmation countdown — wait 3 s or press Enter to skip.
+    folder_str = ", ".join(f"{f}/" for f in result) if result else "(none)"
+    _console.print(f"[dim]Selected:[/] {folder_str}")
+
+    with Live(console=_console, refresh_per_second=4, transient=True) as live:
+        for remaining in range(3, 0, -1):
+            live.update(
+                Text(f"Confirming in {remaining}s… (Enter to skip)", style="dim")
+            )
+            if _read_key_timeout(1.0) == "enter":
+                break
+
+    return result
+
+
+def _prompt_folder_toggles_numbered(
+    display_order: list[str], selected: set[str]
+) -> list[str]:
+    """Number-based folder toggle fallback for non-interactive terminals."""
+    from data_project_manager.core.templates import SRC_TOGGLES, resolve_folders
 
     _console.print(
         "\n[bold]Folders[/] [dim](enter numbers to toggle, Enter to confirm):[/]"
@@ -608,10 +740,7 @@ def _prompt_folder_toggles_rich(current: list[str]) -> list[str]:
             idx = int(token) - 1
             if 0 <= idx < len(display_order):
                 key = display_order[idx]
-                if key in selected:
-                    selected.discard(key)
-                else:
-                    selected.add(key)
+                selected.symmetric_difference_update({key})
         except ValueError:
             continue
 
