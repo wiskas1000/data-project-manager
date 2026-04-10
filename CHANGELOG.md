@@ -7,6 +7,29 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.1.0] — 2026-04-10
+
+### Added
+
+- **Interactive arrow-key pickers** for archetype selection and folder
+  toggles in `datapm new` — both Rich/Typer and argparse fallback CLIs.
+- **3-second confirmation countdown** after folder selection with Enter to
+  skip and Esc/q to abort.
+- Number quick-pick (1–6) alongside arrow navigation in archetype picker.
+
+### Fixed
+
+- Rich `MarkupError` when displaying non-default archetypes (empty style
+  tags `[][/]`).
+- Tests now skip gracefully when Typer is not installed.
+
+### Changed
+
+- UX documentation updated: FOLDER-SELECTION-DESIGN.md, CLI reference,
+  quickstart, templates guide, and FAQ.
+
+---
+
 ## [1.0.0] — 2026-04-09
 
 ### Added
