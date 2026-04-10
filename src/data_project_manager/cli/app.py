@@ -733,12 +733,12 @@ def _read_key_timeout(timeout: float) -> str | None:
 def _prompt_folder_toggles_rich(current: list[str]) -> list[str]:
     """Interactive folder picker with arrow keys, Space, and Enter."""
     from data_project_manager.core.templates import (
-        OPTIONAL_FOLDERS,
         SRC_TOGGLES,
+        folder_display_order,
         resolve_folders,
     )
 
-    display_order = [f for f in OPTIONAL_FOLDERS if f not in SRC_TOGGLES] + SRC_TOGGLES
+    display_order = folder_display_order()
     selected = set(current)
     cursor = 0
 
