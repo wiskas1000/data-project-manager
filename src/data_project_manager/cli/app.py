@@ -736,6 +736,7 @@ def _prompt_folder_toggles_rich(current: list[str]) -> list[str]:
         SRC_TOGGLES,
         folder_display_order,
         resolve_folders,
+        toggle_folder,
     )
 
     display_order = folder_display_order()
@@ -779,7 +780,7 @@ def _prompt_folder_toggles_rich(current: list[str]) -> list[str]:
         elif key == "down" and cursor < len(display_order) - 1:
             cursor += 1
         elif key == "space":
-            selected.symmetric_difference_update({display_order[cursor]})
+            toggle_folder(selected, display_order[cursor])
         elif key == "enter":
             _redraw(num_lines)
             render()
@@ -816,7 +817,11 @@ def _prompt_folder_toggles_numbered(
     display_order: list[str], selected: set[str]
 ) -> list[str]:
     """Number-based folder toggle fallback for non-interactive terminals."""
-    from data_project_manager.core.templates import SRC_TOGGLES, resolve_folders
+    from data_project_manager.core.templates import (
+        SRC_TOGGLES,
+        resolve_folders,
+        toggle_folder,
+    )
 
     _console.print(
         "\n[bold]Folders[/] [dim](enter numbers to toggle, Enter to confirm):[/]"
@@ -835,8 +840,7 @@ def _prompt_folder_toggles_numbered(
         try:
             idx = int(token) - 1
             if 0 <= idx < len(display_order):
-                key = display_order[idx]
-                selected.symmetric_difference_update({key})
+                toggle_folder(selected, display_order[idx])
         except ValueError:
             continue
 

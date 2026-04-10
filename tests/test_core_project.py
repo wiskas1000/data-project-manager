@@ -468,3 +468,47 @@ def test_list_projects_filter_domain(project_env: tuple[Path, Path]) -> None:
     results = list_projects(domain="healthcare", db_path=db)
     assert len(results) == 1
     assert results[0].domain == "healthcare"
+
+
+# ---------------------------------------------------------------------------
+# toggle_folder (parent/child dependency)
+# ---------------------------------------------------------------------------
+
+
+class TestToggleFolder:
+    """Ensure toggle_folder enforces src ↔ subfolder dependencies."""
+
+    def test_deselect_src_cascades_to_children(self) -> None:
+        from data_project_manager.core.templates import toggle_folder
+
+        selected = {"src", "notebooks", "queries", "data"}
+        toggle_folder(selected, "src")
+        assert "src" not in selected
+        assert "notebooks" not in selected
+        assert "queries" not in selected
+        assert "data" in selected  # unrelated folder untouched
+
+    def test_select_subfolder_implies_src(self) -> None:
+        from data_project_manager.core.templates import toggle_folder
+
+        selected = {"data"}
+        toggle_folder(selected, "notebooks")
+        assert "notebooks" in selected
+        assert "src" in selected
+
+    def test_deselect_subfolder_leaves_src(self) -> None:
+        from data_project_manager.core.templates import toggle_folder
+
+        selected = {"src", "notebooks", "queries"}
+        toggle_folder(selected, "notebooks")
+        assert "notebooks" not in selected
+        assert "src" in selected  # still has queries child
+
+    def test_toggle_unrelated_folder(self) -> None:
+        from data_project_manager.core.templates import toggle_folder
+
+        selected = {"src"}
+        toggle_folder(selected, "data")
+        assert "data" in selected
+        toggle_folder(selected, "data")
+        assert "data" not in selected
