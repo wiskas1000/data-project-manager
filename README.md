@@ -201,6 +201,19 @@ See [docs/PLAN.md](docs/PLAN.md) for the full milestone plan.
 | Search & Export | v0.3.0 | FTS5 search, JSON export |
 | Docs & v1 Release | **v1.0.0** | Coverage, documentation, stability |
 
+## Privacy
+
+The SQLite database (`~/.datapm/projects.db`) may contain personal data
+such as names and email addresses (in the `person` table). **Do not share
+the database file** without first reviewing its contents.
+
+When sharing exported JSON, use `--redact` to strip personal data:
+
+```bash
+datapm export my-project --redact          # names/emails replaced with [REDACTED]
+datapm export --all --redact -o index.json  # redacted full index
+```
+
 ## License
 
 MIT
