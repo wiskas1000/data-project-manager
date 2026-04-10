@@ -144,6 +144,55 @@ class TestExportProject:
         assert parsed["slug"] == "2026-01-01-churn-analysis"
 
 
+class TestRedact:
+    """Redact personal data from exports."""
+
+    def test_redact_strips_names(self, export_conn) -> None:
+        from data_project_manager.core.export import _redact_project
+
+        data = _build_project_export(export_conn, "2026-01-01-churn-analysis")
+        assert data is not None
+        _redact_project(data)
+        person = data["people"][0]
+        assert person["first_name"] == "[REDACTED]"
+        assert person["last_name"] == "[REDACTED]"
+
+    def test_redact_strips_email_when_present(self, export_conn) -> None:
+        from data_project_manager.core.export import _redact_project
+
+        data = _build_project_export(export_conn, "2026-01-01-churn-analysis")
+        assert data is not None
+        data["people"][0]["email"] = "alice@example.com"
+        _redact_project(data)
+        assert data["people"][0]["email"] == "[REDACTED]"
+
+    def test_redact_preserves_role(self, export_conn) -> None:
+        from data_project_manager.core.export import _redact_project
+
+        data = _build_project_export(export_conn, "2026-01-01-churn-analysis")
+        assert data is not None
+        _redact_project(data)
+        assert data["people"][0]["role"] == "analyst"
+
+    def test_redact_skips_null_email(self, export_conn) -> None:
+        from data_project_manager.core.export import _redact_project
+
+        data = _build_project_export(export_conn, "2026-01-01-churn-analysis")
+        assert data is not None
+        # The test fixture creates a person without email — it should stay None
+        data["people"][0]["email"] = None
+        _redact_project(data)
+        assert data["people"][0]["email"] is None
+
+    def test_redact_no_people(self, export_conn) -> None:
+        from data_project_manager.core.export import _redact_project
+
+        data = _build_project_export(export_conn, "2026-02-01-empty-project")
+        assert data is not None
+        _redact_project(data)
+        assert data["people"] == []
+
+
 class TestExportAll:
     """Export all projects."""
 

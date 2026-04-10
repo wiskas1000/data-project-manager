@@ -497,15 +497,22 @@ def export(
     compact: Annotated[
         bool, typer.Option("--compact", help="Minified JSON (no indentation)")
     ] = False,
+    redact: Annotated[
+        bool,
+        typer.Option(
+            "--redact",
+            help="Replace personal data (names, emails) with [REDACTED]",
+        ),
+    ] = False,
 ) -> None:
     """Export project metadata as structured JSON."""
     from data_project_manager.core.export import export_all_json, export_project_json
 
     pretty = not compact
     if export_all or slug is None:
-        json_output = export_all_json(pretty=pretty)
+        json_output = export_all_json(pretty=pretty, redact=redact)
     else:
-        json_output = export_project_json(slug, pretty=pretty)
+        json_output = export_project_json(slug, pretty=pretty, redact=redact)
         if json_output is None:
             _err_console.print(f"[bold red]Error:[/] project '{slug}' not found.")
             raise typer.Exit(1)

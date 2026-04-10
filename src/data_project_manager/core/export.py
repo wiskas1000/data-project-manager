@@ -26,6 +26,7 @@ def export_project(
     *,
     db_path: str | Path | None = None,
     config_path: Path | None = None,
+    redact: bool = False,
 ) -> dict[str, Any] | None:
     """Export a single project with all relationships as a dict.
 
@@ -33,6 +34,8 @@ def export_project(
         slug: Project slug.
         db_path: Explicit database path (skips config lookup).
         config_path: Explicit config path.
+        redact: If ``True``, replace personal data (names, emails) with
+            placeholders.
 
     Returns:
         Full project dict with tags, people, files, deliverables, and
@@ -44,7 +47,10 @@ def export_project(
     effective_db_path = db_path or get_db_path(config_path)
     conn = get_connection(effective_db_path)
     try:
-        return _build_project_export(conn, slug)
+        data = _build_project_export(conn, slug)
+        if data is not None and redact:
+            _redact_project(data)
+        return data
     finally:
         conn.close()
 
@@ -53,12 +59,15 @@ def export_all(
     *,
     db_path: str | Path | None = None,
     config_path: Path | None = None,
+    redact: bool = False,
 ) -> dict[str, Any]:
     """Export an index of all projects with their relationships.
 
     Args:
         db_path: Explicit database path (skips config lookup).
         config_path: Explicit config path.
+        redact: If ``True``, replace personal data (names, emails) with
+            placeholders.
 
     Returns:
         Dict with ``exported_at``, ``count``, and ``projects`` (list).
@@ -69,7 +78,11 @@ def export_all(
     effective_db_path = db_path or get_db_path(config_path)
     conn = get_connection(effective_db_path)
     try:
-        return _build_all_export(conn)
+        data = _build_all_export(conn)
+        if redact:
+            for project in data["projects"]:
+                _redact_project(project)
+        return data
     finally:
         conn.close()
 
@@ -80,6 +93,7 @@ def export_project_json(
     db_path: str | Path | None = None,
     config_path: Path | None = None,
     pretty: bool = True,
+    redact: bool = False,
 ) -> str | None:
     """Export a single project as a JSON string.
 
@@ -88,11 +102,12 @@ def export_project_json(
         db_path: Explicit database path.
         config_path: Explicit config path.
         pretty: Indent the JSON output.
+        redact: If ``True``, replace personal data with placeholders.
 
     Returns:
         JSON string, or ``None`` if the slug is not found.
     """
-    data = export_project(slug, db_path=db_path, config_path=config_path)
+    data = export_project(slug, db_path=db_path, config_path=config_path, redact=redact)
     if data is None:
         return None
     indent = 2 if pretty else None
@@ -104,6 +119,7 @@ def export_all_json(
     db_path: str | Path | None = None,
     config_path: Path | None = None,
     pretty: bool = True,
+    redact: bool = False,
 ) -> str:
     """Export the full project index as a JSON string.
 
@@ -111,11 +127,12 @@ def export_all_json(
         db_path: Explicit database path.
         config_path: Explicit config path.
         pretty: Indent the JSON output.
+        redact: If ``True``, replace personal data with placeholders.
 
     Returns:
         JSON string.
     """
-    data = export_all(db_path=db_path, config_path=config_path)
+    data = export_all(db_path=db_path, config_path=config_path, redact=redact)
     indent = 2 if pretty else None
     return json.dumps(data, indent=indent, ensure_ascii=False, default=str)
 
@@ -175,3 +192,17 @@ def _build_all_export(conn: sqlite3.Connection) -> dict[str, Any]:
         "count": len(items),
         "projects": items,
     }
+
+
+#: Person fields that contain personal data.
+_PII_FIELDS = ("first_name", "last_name", "email")
+
+_REDACTED = "[REDACTED]"
+
+
+def _redact_project(data: dict[str, Any]) -> None:
+    """Strip personal data from an exported project dict in place."""
+    for person in data.get("people", []):
+        for field in _PII_FIELDS:
+            if field in person and person[field] is not None:
+                person[field] = _REDACTED

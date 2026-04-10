@@ -152,6 +152,11 @@ def main() -> None:
         action="store_true",
         help="Minified JSON (no indentation)",
     )
+    export_parser.add_argument(
+        "--redact",
+        action="store_true",
+        help="Replace personal data (names, emails) with [REDACTED]",
+    )
 
     # config
     config_parser = subparsers.add_parser("config", help="Manage configuration")
@@ -348,10 +353,11 @@ def _handle_export(args: argparse.Namespace) -> None:
     from data_project_manager.core.export import export_all_json, export_project_json
 
     pretty = not args.compact
+    redact = args.redact
     if args.export_all or args.slug is None:
-        json_output = export_all_json(pretty=pretty)
+        json_output = export_all_json(pretty=pretty, redact=redact)
     else:
-        json_output = export_project_json(args.slug, pretty=pretty)
+        json_output = export_project_json(args.slug, pretty=pretty, redact=redact)
         if json_output is None:
             print(f"Error: project '{args.slug}' not found.", file=sys.stderr)
             sys.exit(1)
