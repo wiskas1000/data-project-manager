@@ -1,8 +1,8 @@
 # `datapm new` — Folder Selection UX Design
 
-> **Status**: Final draft — ready for implementation  
-> **Milestone**: v0.2.0 (folder selection redesign)  
-> **Last updated**: 2026-04-08
+> **Status**: Implemented  
+> **Milestone**: v1.0.0  
+> **Last updated**: 2026-04-10
 
 ## 1. Context
 
@@ -159,34 +159,61 @@ later if the pattern emerges.
 
 ### 4.1 Happy path (Rich terminal)
 
+Both the archetype picker and folder toggles use **arrow-key navigation**
+when Rich/Typer is installed and the terminal supports it.
+
 ```
 $ datapm new
 
-? Project name: Churn analysis
-? Domain (optional): marketing
-? Description (optional): Q2 churn drivers for retail segment
-? Project type:
-  ○ Minimal             communicatie, documenten
-  ❯ Analysis            + data, src, notebooks, resultaten
-    Modeling             + data, src, notebooks, resultaten, literatuur
-    Reporting            + data, src, queries, resultaten
-    Research             + data, src, notebooks, literatuur, resultaten
-    Full                 all folders
+Project name: Churn analysis
+Domain (optional): marketing
+Description (optional): Q2 churn drivers for retail segment
 
-? Folders (space to toggle, enter to confirm):
-  ✓ data/               raw + processed + metadata
-  ✓ src/                source code
-  ✓   src/notebooks/    Marimo / Jupyter notebooks
-  ○   src/queries/      SQL files
-  ○ literatuur/         reference papers, articles
-  ✓ resultaten/         export + figuren
+Project type  ↑↓ move · Enter select
+    [1] Minimal       communicatie, documenten
+  ❯ [2] Analysis      + data, src, notebooks, resultaten
+    [3] Modeling      + data, src, notebooks, resultaten, literatuur
+    [4] Reporting     + data, src, queries, resultaten
+    [5] Research      + data, src, notebooks, literatuur, resultaten
+    [6] Full          all folders
 
-? Initialise git in src/? [y/N]: y
+Folders  ↑↓ move · Space toggle · Enter confirm
+  ❯ ✓ data/
+    ✓ src/
+    ○ literatuur/
+    ✓ resultaten/
+    ✓     src/notebooks/
+    ○     src/queries/
+Selected: data/, notebooks/, resultaten/, src/
+Confirming in 3s… (Enter to skip, Esc to abort)
+
+Initialise git in src/? [y/N]: y
 
 ✔ Created 2026-04-08_Churn-Analysis/ with 6 folders.
 ```
 
+**Keyboard controls:**
+
+| Screen | Keys |
+|--------|------|
+| Archetype picker | ↑↓ navigate, Enter select, 1-6 quick-pick |
+| Folder toggles | ↑↓ navigate, Space toggle, Enter confirm |
+| Confirmation | Enter skip countdown, Esc / q abort |
+
+**Confirmation countdown:** After pressing Enter on the folder picker, a
+3-second countdown shows the selected folders. Press Enter to skip the
+wait, or Esc / q to abort the entire command. This prevents accidental
+folder selections from being committed.
+
+**Duplicate folder error:** If the target folder already exists on disk
+(e.g. `2026-04-10_Churn-Analysis/`), the command raises a
+`FileExistsError` *before* any database record is created. No orphan
+records or partial state.
+
 ### 4.2 Plain terminal rendering (argparse fallback)
+
+When Typer is not installed, or when stdin is not a real terminal
+(piped input, CI), the CLI uses numbered prompts:
 
 ```
 Project type:
@@ -211,6 +238,9 @@ Initialise git in src/? [y/N]:
 ```
 
 Accepts comma-separated numbers (`1,3`) or Enter to accept defaults.
+
+> **Note:** The Typer (Rich) CLI also falls back to numbered input when
+> stdin is not a TTY (e.g. piped input or test runners).
 
 ### 4.3 Shortcut flags (zero-prompt mode)
 
@@ -244,8 +274,9 @@ provided, skip the git prompt.
 | 3 | Description (optional) | `--description` flag |
 | 4 | Archetype picker | `--type`, `--template`, or `--folder` |
 | 5 | Folder toggles | `--type` without `--add`/`--remove`, or `--folder` |
-| 6 | Git init | `--git`/`--no-git`, or `defaults.git_init` in config |
-| 7 | Done | _(always shown)_ |
+| 6 | Confirmation countdown (3 s) | Skipped in non-interactive mode and one-liner mode |
+| 7 | Git init | `--git`/`--no-git`, or `defaults.git_init` in config |
+| 8 | Done | _(always shown)_ |
 
 ---
 

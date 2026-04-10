@@ -2,10 +2,19 @@
 
 import importlib
 
+import pytest
+
+_has_typer = True
+try:
+    import typer as _typer  # noqa: F401
+except ImportError:
+    _has_typer = False
+
 
 class TestCLIInit:
     """Test the two-tier CLI dispatch in cli/__init__.py."""
 
+    @pytest.mark.skipif(not _has_typer, reason="typer not installed")
     def test_main_with_typer_available(self, monkeypatch):
         """When Typer is available, main() calls cli.app.app()."""
         called = []

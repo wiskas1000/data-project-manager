@@ -58,6 +58,25 @@ Create a new project interactively or as a one-liner.
    # Archetype with adjustments
    datapm new "Risk Model" --type modeling --add notebooks --remove models
 
+**Interactive controls** (Rich/Typer mode):
+
+.. list-table::
+   :widths: 30 70
+
+   * - Archetype picker
+     - ↑↓ navigate, Enter select, 1–6 quick-pick
+   * - Folder toggles
+     - ↑↓ navigate, Space toggle, Enter confirm
+   * - Confirmation countdown
+     - Enter skip, Esc / q abort
+
+After selecting folders a **3-second confirmation countdown** displays
+the chosen folders.  Press Enter to skip the wait, or Esc / q to abort.
+
+**Error — folder already exists**: If the dated folder already exists on
+disk, the command exits with an error *before* writing anything to the
+database.  No partial state is created.
+
 
 datapm list
 -----------

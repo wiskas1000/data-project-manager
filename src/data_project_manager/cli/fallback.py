@@ -557,50 +557,253 @@ def _prompt_bool(message: str) -> bool:
     return input(message).strip().lower() in {"y", "yes"}
 
 
+def _read_key() -> str:
+    """Read a single keypress via raw terminal I/O (stdlib only).
+
+    Returns 'up', 'down', 'space', 'enter', 'escape', 'q',
+    a digit character, or ''.
+    """
+    import os
+    import select
+
+    try:
+        import termios
+        import tty
+    except ImportError:
+        return ""
+    fd = sys.stdin.fileno()
+    old = termios.tcgetattr(fd)
+    try:
+        tty.setraw(fd)
+        ch = os.read(fd, 1)
+        if ch == b"\x1b":
+            ready, _, _ = select.select([fd], [], [], 0.05)
+            if ready and os.read(fd, 1) == b"[":
+                arrow = os.read(fd, 1)
+                return {b"A": "up", b"B": "down"}.get(arrow, "")
+            return "escape"
+        if ch == b" ":
+            return "space"
+        if ch in (b"\r", b"\n"):
+            return "enter"
+        if ch == b"\x03":
+            raise KeyboardInterrupt
+        if ch == b"q":
+            return "q"
+        decoded = ch.decode("ascii", errors="ignore")
+        if decoded.isdigit():
+            return decoded
+        return ""
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old)
+
+
+def _read_key_timeout(timeout: float) -> str | None:
+    """Read a keypress with timeout. Returns None on timeout."""
+    import os
+    import select
+
+    try:
+        import termios
+        import tty
+    except ImportError:
+        return None
+    fd = sys.stdin.fileno()
+    old = termios.tcgetattr(fd)
+    try:
+        tty.setraw(fd)
+        ready, _, _ = select.select([fd], [], [], timeout)
+        if not ready:
+            return None
+        ch = os.read(fd, 1)
+        if ch in (b"\r", b"\n"):
+            return "enter"
+        if ch == b"\x1b":
+            return "escape"
+        if ch == b"q":
+            return "q"
+        if ch == b"\x03":
+            raise KeyboardInterrupt
+        return ch.decode("ascii", errors="ignore")
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old)
+
+
+def _redraw(num_lines: int) -> None:
+    """Move cursor up *num_lines* and clear to end of screen."""
+    sys.stdout.write(f"\x1b[{num_lines}A\x1b[J")
+    sys.stdout.flush()
+
+
+def _is_interactive() -> bool:
+    """Check if we can use arrow-key navigation."""
+    try:
+        import termios as _termios  # noqa: F401
+
+        return sys.stdin.isatty()
+    except ImportError:
+        return False
+
+
 def _prompt_archetype(default_key: str = "analysis") -> str:
-    """Show a numbered archetype menu and return the selected key."""
+    """Show an archetype menu with arrow-key or numbered input."""
     from data_project_manager.core.templates import BUILT_IN_ARCHETYPES
 
     keys = list(BUILT_IN_ARCHETYPES)
-    default_idx = keys.index(default_key) + 1 if default_key in keys else 2
+    cursor = keys.index(default_key) if default_key in keys else 1
 
+    if not _is_interactive():
+        return _prompt_archetype_numbered(keys, BUILT_IN_ARCHETYPES, cursor)
+
+    num_lines = 1 + len(keys)
+
+    def render() -> None:
+        print("Project type  (up/down move, Enter select)")
+        for i, key in enumerate(keys):
+            arch = BUILT_IN_ARCHETYPES[key]
+            marker = ">" if i == cursor else " "
+            print(f"  {marker} [{i + 1}] {arch.label:<12s}  {arch.description}")
+
+    print()
+    render()
+    while True:
+        key = _read_key()
+        if key == "up" and cursor > 0:
+            cursor -= 1
+        elif key == "down" and cursor < len(keys) - 1:
+            cursor += 1
+        elif key == "enter":
+            _redraw(num_lines)
+            render()
+            break
+        elif key.isdigit():
+            n = int(key)
+            if 1 <= n <= len(keys):
+                cursor = n - 1
+                _redraw(num_lines)
+                render()
+                break
+            continue
+        else:
+            continue
+        _redraw(num_lines)
+        render()
+
+    return keys[cursor]
+
+
+def _prompt_archetype_numbered(
+    keys: list[str],
+    archetypes: dict,
+    default_idx: int,
+) -> str:
+    """Number-based archetype picker for non-interactive terminals."""
     print("\nProject type:")
-    for i, key in enumerate(keys, 1):
-        arch = BUILT_IN_ARCHETYPES[key]
+    for i, key in enumerate(keys):
+        arch = archetypes[key]
         marker = "*" if i == default_idx else " "
-        print(f"  {marker}[{i}] {arch.label:<12s} ({arch.description})")
+        print(f"  {marker}[{i + 1}] {arch.label:<12s} ({arch.description})")
 
-    raw = input(f"Select [1-{len(keys)}, default={default_idx}]: ").strip()
+    raw = input(f"Select [1-{len(keys)}, default={default_idx + 1}]: ").strip()
     if not raw:
-        return keys[default_idx - 1]
+        return keys[default_idx]
     try:
         choice = int(raw)
         if 1 <= choice <= len(keys):
             return keys[choice - 1]
     except ValueError:
         pass
-    print(f"  Invalid choice, using default: {default_key}")
-    return default_key
+    print(f"  Invalid choice, using default: {keys[default_idx]}")
+    return keys[default_idx]
 
 
 def _prompt_folder_toggles(current: list[str]) -> list[str]:
-    """Show folder toggles and let the user adjust."""
+    """Show folder toggles with arrow-key or numbered input."""
     from data_project_manager.core.templates import (
         OPTIONAL_FOLDERS,
         SRC_TOGGLES,
         resolve_folders,
     )
 
-    # Display order: top-level folders, then src children indented
     display_order = [f for f in OPTIONAL_FOLDERS if f not in SRC_TOGGLES] + SRC_TOGGLES
     selected = set(current)
+    cursor = 0
+
+    if not _is_interactive():
+        return _prompt_folder_toggles_numbered(
+            display_order,
+            selected,
+            SRC_TOGGLES,
+        )
+
+    num_lines = 1 + len(display_order)
+
+    def render() -> None:
+        print("Folders  (up/down move, Space toggle, Enter confirm)")
+        for i, key in enumerate(display_order):
+            is_cur = i == cursor
+            marker = ">" if is_cur else " "
+            check = "x" if key in selected else " "
+            indent = "    " if key in SRC_TOGGLES else ""
+            label = f"src/{key}/" if key in SRC_TOGGLES else f"{key}/"
+            print(f"  {marker} [{check}] {indent}{label}")
+
+    print()
+    render()
+    while True:
+        key = _read_key()
+        if key == "up" and cursor > 0:
+            cursor -= 1
+        elif key == "down" and cursor < len(display_order) - 1:
+            cursor += 1
+        elif key == "space":
+            selected.symmetric_difference_update({display_order[cursor]})
+        elif key == "enter":
+            _redraw(num_lines)
+            render()
+            break
+        else:
+            continue
+        _redraw(num_lines)
+        render()
+
+    result = resolve_folders(sorted(selected))
+
+    # Confirmation countdown.
+    folder_str = ", ".join(f"{f}/" for f in result) if result else "(none)"
+    print(f"Selected: {folder_str}")
+    for remaining in range(3, 0, -1):
+        sys.stdout.write(
+            f"\rConfirming in {remaining}s... (Enter to skip, Esc to abort)"
+        )
+        sys.stdout.flush()
+        pressed = _read_key_timeout(1.0)
+        if pressed == "enter":
+            print()
+            break
+        if pressed in ("escape", "q"):
+            print("\nAborted.")
+            sys.exit(1)
+    else:
+        print()
+
+    return result
+
+
+def _prompt_folder_toggles_numbered(
+    display_order: list[str],
+    selected: set[str],
+    src_toggles: list[str],
+) -> list[str]:
+    """Number-based folder toggle for non-interactive terminals."""
+    from data_project_manager.core.templates import resolve_folders
 
     print("\nFolders (enter numbers to toggle, Enter to confirm):")
     for i, key in enumerate(display_order, 1):
-        check = "✓" if key in selected else " "
-        indent = "  " if key in SRC_TOGGLES else ""
+        check = "x" if key in selected else " "
+        indent = "  " if key in src_toggles else ""
         label = key
-        if key in SRC_TOGGLES:
+        if key in src_toggles:
             label = f"{key}/ (in src/)"
         print(f"  [{i}] {check} {indent}{label}")
 
@@ -613,10 +816,7 @@ def _prompt_folder_toggles(current: list[str]) -> list[str]:
             idx = int(token) - 1
             if 0 <= idx < len(display_order):
                 key = display_order[idx]
-                if key in selected:
-                    selected.discard(key)
-                else:
-                    selected.add(key)
+                selected.symmetric_difference_update({key})
         except ValueError:
             continue
 

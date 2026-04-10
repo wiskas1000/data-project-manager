@@ -13,25 +13,25 @@ Built-in archetypes
    :widths: 15 55 30
 
    * - Key
-     - Folders
+     - Optional folders
      - Use case
    * - minimal
-     - (base folders only)
+     - *(none — base folders only)*
      - Quick ad-hoc requests
    * - analysis
-     - data, src
+     - data, src, notebooks, resultaten
      - Standard data analysis
    * - modeling
-     - data, src, models
+     - data, src, notebooks, resultaten, literatuur
      - ML / statistical modeling
    * - reporting
-     - data, src, resultaten
+     - data, src, queries, resultaten
      - Reports and dashboards
    * - research
-     - data, src, literatuur
+     - data, src, notebooks, literatuur, resultaten
      - Academic / research projects
    * - full
-     - data, src, models, resultaten, literatuur, notebooks
+     - all optional folders
      - Everything
 
 Every project always gets the **base folders**: ``communicatie/`` and
@@ -40,16 +40,21 @@ Every project always gets the **base folders**: ``communicatie/`` and
 Selecting an archetype
 ----------------------
 
-**Interactive** — ``datapm new`` shows a numbered picker:
+**Interactive** — ``datapm new`` shows an arrow-key picker (Rich/Typer):
 
 .. code-block:: text
 
-   Project type:
-     ❯ Analysis     Standard data analysis
-       Minimal      Quick ad-hoc requests
-       Modeling     ML / statistical modeling
-       ...
-   Select [1-6]:
+   Project type  ↑↓ move · Enter select
+       [1] Minimal       communicatie, documenten
+     ❯ [2] Analysis      + data, src, notebooks, resultaten
+       [3] Modeling      + data, src, notebooks, resultaten, literatuur
+       [4] Reporting     + data, src, queries, resultaten
+       [5] Research      + data, src, notebooks, literatuur, resultaten
+       [6] Full          all folders
+
+Use arrow keys to navigate and Enter to select, or type a number for
+quick selection.  In the argparse fallback the picker uses numbered
+input only.
 
 **One-liner** — use ``--type``:
 

@@ -549,39 +549,182 @@ def config_init(
 # ---------------------------------------------------------------------------
 
 
+def _redraw(num_lines: int) -> None:
+    """Move cursor up *num_lines* and clear to end of screen."""
+    sys.stdout.write(f"\x1b[{num_lines}A\x1b[J")
+    sys.stdout.flush()
+
+
 def _prompt_archetype_rich(default_key: str = "analysis") -> str:
     """Show a Rich-formatted archetype picker."""
     from data_project_manager.core.templates import BUILT_IN_ARCHETYPES
 
     keys = list(BUILT_IN_ARCHETYPES)
-    default_idx = keys.index(default_key) + 1 if default_key in keys else 2
+    cursor = keys.index(default_key) if default_key in keys else 1
 
+    # Fall back to number-based when not interactive.
+    try:
+        import termios as _termios  # noqa: F401
+
+        interactive = sys.stdin.isatty()
+    except ImportError:
+        interactive = False
+
+    if not interactive:
+        return _prompt_archetype_numbered(keys, BUILT_IN_ARCHETYPES, cursor)
+
+    # Number of printed lines: 1 header + len(keys) items.
+    num_lines = 1 + len(keys)
+
+    def render() -> None:
+        _console.print("[bold]Project type[/]  [dim]↑↓ move · Enter select[/]")
+        for i, key in enumerate(keys):
+            arch = BUILT_IN_ARCHETYPES[key]
+            is_cur = i == cursor
+            if is_cur:
+                marker = "[bold cyan]❯[/]"
+                style = "bold"
+            else:
+                marker = " "
+                style = ""
+            padded = f"{arch.label:<12s}"
+            label = f"[{style}]{padded}[/{style}]" if style else padded
+            num = f"[dim]\\[{i + 1}][/dim]"
+            _console.print(f"  {marker} {num} {label}  [dim]{arch.description}[/dim]")
+
+    _console.print()
+    render()
+    while True:
+        key = _read_key()
+        if key == "up" and cursor > 0:
+            cursor -= 1
+        elif key == "down" and cursor < len(keys) - 1:
+            cursor += 1
+        elif key == "enter":
+            _redraw(num_lines)
+            render()
+            break
+        elif key.isdigit():
+            n = int(key)
+            if 1 <= n <= len(keys):
+                cursor = n - 1
+                _redraw(num_lines)
+                render()
+                break
+            continue
+        else:
+            continue
+        _redraw(num_lines)
+        render()
+
+    return keys[cursor]
+
+
+def _prompt_archetype_numbered(
+    keys: list[str],
+    archetypes: dict,
+    default_idx: int,
+) -> str:
+    """Number-based archetype picker for non-interactive terminals."""
     _console.print("\n[bold]Project type:[/]")
-    for i, key in enumerate(keys, 1):
-        arch = BUILT_IN_ARCHETYPES[key]
+    for i, key in enumerate(keys):
+        arch = archetypes[key]
         if i == default_idx:
             marker = "[bold cyan]❯[/]"
             style = "bold"
         else:
             marker = " "
             style = ""
-        _console.print(
-            f"  {marker} [{style}]{arch.label:<12s}[/{style}]"
-            f"  [dim]{arch.description}[/]"
-        )
+        padded = f"{arch.label:<12s}"
+        label = f"[{style}]{padded}[/{style}]" if style else padded
+        num = f"[dim][{i + 1}][/dim]"
+        _console.print(f"  {marker} {num} {label}  [dim]{arch.description}[/dim]")
 
-    raw = typer.prompt(f"Select [1-{len(keys)}]", default=str(default_idx))
+    raw = typer.prompt(f"Select [1-{len(keys)}]", default=str(default_idx + 1))
     try:
         choice = int(raw)
         if 1 <= choice <= len(keys):
             return keys[choice - 1]
     except ValueError:
         pass
-    return default_key
+    return keys[default_idx]
+
+
+def _read_key() -> str:
+    """Read a single keypress via raw terminal I/O.
+
+    Returns 'up', 'down', 'space', 'enter', 'escape', 'q',
+    a digit character, or ''.
+    """
+    import os
+    import select
+
+    try:
+        import termios
+        import tty
+    except ImportError:
+        return ""
+    fd = sys.stdin.fileno()
+    old = termios.tcgetattr(fd)
+    try:
+        tty.setraw(fd)
+        ch = os.read(fd, 1)
+        if ch == b"\x1b":
+            # Arrow keys send \x1b[A / \x1b[B — peek for more bytes.
+            ready, _, _ = select.select([fd], [], [], 0.05)
+            if ready and os.read(fd, 1) == b"[":
+                arrow = os.read(fd, 1)
+                return {b"A": "up", b"B": "down"}.get(arrow, "")
+            return "escape"
+        if ch == b" ":
+            return "space"
+        if ch in (b"\r", b"\n"):
+            return "enter"
+        if ch == b"\x03":
+            raise KeyboardInterrupt
+        if ch == b"q":
+            return "q"
+        decoded = ch.decode("ascii", errors="ignore")
+        if decoded.isdigit():
+            return decoded
+        return ""
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old)
+
+
+def _read_key_timeout(timeout: float) -> str | None:
+    """Read a keypress with timeout. Returns None on timeout."""
+    import os
+    import select
+
+    try:
+        import termios
+        import tty
+    except ImportError:
+        return None
+    fd = sys.stdin.fileno()
+    old = termios.tcgetattr(fd)
+    try:
+        tty.setraw(fd)
+        ready, _, _ = select.select([fd], [], [], timeout)
+        if not ready:
+            return None
+        ch = os.read(fd, 1)
+        if ch in (b"\r", b"\n"):
+            return "enter"
+        if ch == b"\x1b":
+            return "escape"
+        if ch == b"q":
+            return "q"
+        if ch == b"\x03":
+            raise KeyboardInterrupt
+        return ch.decode("ascii", errors="ignore")
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old)
 
 
 def _prompt_folder_toggles_rich(current: list[str]) -> list[str]:
-    """Show Rich-formatted folder toggles."""
+    """Interactive folder picker with arrow keys, Space, and Enter."""
     from data_project_manager.core.templates import (
         OPTIONAL_FOLDERS,
         SRC_TOGGLES,
@@ -590,6 +733,83 @@ def _prompt_folder_toggles_rich(current: list[str]) -> list[str]:
 
     display_order = [f for f in OPTIONAL_FOLDERS if f not in SRC_TOGGLES] + SRC_TOGGLES
     selected = set(current)
+    cursor = 0
+
+    # Fall back to number-based input when stdin is not a real terminal.
+    try:
+        import termios as _termios  # noqa: F401
+
+        interactive = sys.stdin.isatty()
+    except ImportError:
+        interactive = False
+
+    if not interactive:
+        return _prompt_folder_toggles_numbered(display_order, selected)
+
+    num_lines = 1 + len(display_order)
+
+    def render() -> None:
+        _console.print(
+            "[bold]Folders[/]  [dim]↑↓ move · Space toggle · Enter confirm[/]"
+        )
+        for i, key in enumerate(display_order):
+            is_cur = i == cursor
+            indent = "    " if key in SRC_TOGGLES else ""
+            label = f"src/{key}/" if key in SRC_TOGGLES else f"{key}/"
+            marker = "[bold cyan]❯[/]" if is_cur else " "
+            check = "[green]✓[/]" if key in selected else "[dim]○[/]"
+            style = "bold" if is_cur else ""
+            name = f"{indent}{label}"
+            styled = f"[{style}]{name}[/{style}]" if style else name
+            _console.print(f"  {marker} {check} {styled}")
+
+    _console.print()
+    render()
+    while True:
+        key = _read_key()
+        if key == "up" and cursor > 0:
+            cursor -= 1
+        elif key == "down" and cursor < len(display_order) - 1:
+            cursor += 1
+        elif key == "space":
+            selected.symmetric_difference_update({display_order[cursor]})
+        elif key == "enter":
+            _redraw(num_lines)
+            render()
+            break
+        else:
+            continue
+        _redraw(num_lines)
+        render()
+
+    result = resolve_folders(sorted(selected))
+
+    # Confirmation countdown — wait 3 s, Enter to skip, Esc/q to abort.
+    folder_str = ", ".join(f"{f}/" for f in result) if result else "(none)"
+    _console.print(f"[dim]Selected:[/] {folder_str}")
+    for remaining in range(3, 0, -1):
+        _console.print(
+            f"[dim]Confirming in {remaining}s… (Enter to skip, Esc to abort)[/]",
+            end="\r",
+        )
+        pressed = _read_key_timeout(1.0)
+        if pressed == "enter":
+            _console.print()
+            break
+        if pressed in ("escape", "q"):
+            _console.print("\n[yellow]Aborted.[/]")
+            raise typer.Abort()
+    else:
+        _console.print()
+
+    return result
+
+
+def _prompt_folder_toggles_numbered(
+    display_order: list[str], selected: set[str]
+) -> list[str]:
+    """Number-based folder toggle fallback for non-interactive terminals."""
+    from data_project_manager.core.templates import SRC_TOGGLES, resolve_folders
 
     _console.print(
         "\n[bold]Folders[/] [dim](enter numbers to toggle, Enter to confirm):[/]"
@@ -609,10 +829,7 @@ def _prompt_folder_toggles_rich(current: list[str]) -> list[str]:
             idx = int(token) - 1
             if 0 <= idx < len(display_order):
                 key = display_order[idx]
-                if key in selected:
-                    selected.discard(key)
-                else:
-                    selected.add(key)
+                selected.symmetric_difference_update({key})
         except ValueError:
             continue
 
