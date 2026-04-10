@@ -37,11 +37,15 @@ directory or add additional roots.
 Create your first project
 -------------------------
 
-**Interactive mode** — Typer prompts for every field:
+**Interactive mode** — arrow-key pickers for archetype and folders:
 
 .. code-block:: bash
 
    datapm new
+
+Use ↑↓ to navigate, Enter to select, Space to toggle folders.  A
+3-second confirmation countdown lets you review your selection (Enter
+to skip, Esc to abort).
 
 **One-liner** — skip the prompts:
 

@@ -77,6 +77,15 @@ How do I change a project's status?
 Valid statuses: ``active``, ``paused``, ``done``, ``archived``.  The
 change is recorded in the project's changelog automatically.
 
+Why does ``datapm new`` say "Project folder already exists"?
+-------------------------------------------------------------
+
+The target folder (e.g. ``2026-04-10_Churn-Analysis/``) already exists
+on disk — typically from a previous ``datapm new`` with the same name on
+the same date.  The command checks for this **before** creating a
+database record, so no orphan data is left behind.  Choose a different
+project name or delete/rename the existing folder.
+
 What is ``project.json``?
 --------------------------
 
