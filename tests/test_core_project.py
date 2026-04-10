@@ -475,6 +475,36 @@ def test_list_projects_filter_domain(project_env: tuple[Path, Path]) -> None:
 # ---------------------------------------------------------------------------
 
 
+class TestFolderDisplayOrder:
+    """Ensure folder_display_order places src toggles right after src."""
+
+    def test_src_toggles_follow_src(self) -> None:
+        from data_project_manager.core.templates import (
+            SRC_TOGGLES,
+            folder_display_order,
+        )
+
+        order = folder_display_order()
+        src_idx = order.index("src")
+        for i, toggle in enumerate(SRC_TOGGLES):
+            assert order[src_idx + 1 + i] == toggle
+
+    def test_no_duplicates(self) -> None:
+        from data_project_manager.core.templates import folder_display_order
+
+        order = folder_display_order()
+        assert len(order) == len(set(order))
+
+    def test_all_optional_folders_present(self) -> None:
+        from data_project_manager.core.templates import (
+            OPTIONAL_FOLDERS,
+            folder_display_order,
+        )
+
+        order = folder_display_order()
+        assert set(order) == set(OPTIONAL_FOLDERS)
+
+
 class TestToggleFolder:
     """Ensure toggle_folder enforces src ↔ subfolder dependencies."""
 

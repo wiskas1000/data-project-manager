@@ -200,6 +200,8 @@ See [docs/PLAN.md](docs/PLAN.md) for the full milestone plan.
 | Typed Data Model | v0.2.1 | Frozen dataclasses for all entities |
 | Search & Export | v0.3.0 | FTS5 search, JSON export |
 | Docs & v1 Release | **v1.0.0** | Coverage, documentation, stability |
+| Folder Archetypes & CLI Polish | v1.1.0 | Archetype picker, arrow-key toggles, `--type`/`--folder`/`--add`/`--remove` flags |
+| Privacy & UI Fixes | v1.1.1 | `--redact` flag, folder toggle dependency fix, display order fix |
 
 ## Privacy
 

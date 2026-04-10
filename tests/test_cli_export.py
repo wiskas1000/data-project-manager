@@ -103,6 +103,66 @@ class TestExportCLI:
         data = json.loads(out)
         assert data["slug"] == "2026-01-01-churn-analysis"
 
+    def test_export_redact_single(self, monkeypatch, tmp_path, capsys) -> None:
+        db_path = _patch_conn(monkeypatch, tmp_path)
+
+        # Add a person so --redact has PII to strip
+        from data_project_manager.db.repositories.person import (
+            PersonRepository,
+            ProjectPersonRepository,
+        )
+
+        conn = get_connection(db_path)
+        person_repo = PersonRepository(conn)
+        pp_repo = ProjectPersonRepository(conn)
+        project_repo = ProjectRepository(conn)
+        project = project_repo.get_by_slug("2026-01-01-churn-analysis")
+        person = person_repo.create(first_name="Alice", last_name="Smith")
+        pp_repo.add(project_id=project.id, person_id=person.id, role="analyst")
+        conn.close()
+
+        from data_project_manager.cli.fallback import main
+
+        monkeypatch.setattr(
+            "sys.argv",
+            ["datapm", "export", "2026-01-01-churn-analysis", "--redact"],
+        )
+        main()
+        out = capsys.readouterr().out
+        data = json.loads(out)
+        person_data = data["people"][0]
+        assert person_data["first_name"] == "[REDACTED]"
+        assert person_data["last_name"] == "[REDACTED]"
+        assert person_data["role"] == "analyst"
+
+    def test_export_redact_all(self, monkeypatch, tmp_path, capsys) -> None:
+        db_path = _patch_conn(monkeypatch, tmp_path)
+
+        from data_project_manager.db.repositories.person import (
+            PersonRepository,
+            ProjectPersonRepository,
+        )
+
+        conn = get_connection(db_path)
+        person_repo = PersonRepository(conn)
+        pp_repo = ProjectPersonRepository(conn)
+        project_repo = ProjectRepository(conn)
+        project = project_repo.get_by_slug("2026-01-01-churn-analysis")
+        person = person_repo.create(first_name="Bob", last_name="Jones")
+        pp_repo.add(project_id=project.id, person_id=person.id, role="lead")
+        conn.close()
+
+        from data_project_manager.cli.fallback import main
+
+        monkeypatch.setattr("sys.argv", ["datapm", "export", "--all", "--redact"])
+        main()
+        out = capsys.readouterr().out
+        data = json.loads(out)
+        churn = next(
+            p for p in data["projects"] if p["slug"] == "2026-01-01-churn-analysis"
+        )
+        assert churn["people"][0]["first_name"] == "[REDACTED]"
+
     def test_export_to_file(self, monkeypatch, tmp_path, capsys) -> None:
         _patch_conn(monkeypatch, tmp_path)
 

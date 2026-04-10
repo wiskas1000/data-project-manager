@@ -1,6 +1,6 @@
 [project]
 name = "data-project-manager"
-version = "1.1.1"
+version = "1.1.2"
 description = "A project launcher and metadata database for analytical work"
 readme = "README.md"
 authors = [

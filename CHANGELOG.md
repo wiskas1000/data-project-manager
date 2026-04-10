@@ -7,6 +7,24 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.1.2] — 2026-04-10
+
+### Changed
+
+- Removed unused `row_to_dict()` helper from `db/repositories/_helpers.py`.
+
+### Docs
+
+- Added `--redact` option to Sphinx CLI reference (`docs/usage/cli.rst`).
+- Added v1.1.0 and v1.1.1 milestones to README roadmap table.
+
+### Tests
+
+- Added integration tests for `--redact` flag in CLI export (single + all).
+- Added unit tests for `folder_display_order()` ordering invariants.
+
+---
+
 ## [1.1.1] — 2026-04-10
 
 ### Added
