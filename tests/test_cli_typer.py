@@ -2,7 +2,12 @@
 
 import json
 
-from typer.testing import CliRunner
+import pytest
+
+try:
+    from typer.testing import CliRunner
+except ImportError:
+    pytest.skip("typer not installed", allow_module_level=True)
 
 from data_project_manager.db.connection import get_connection
 from data_project_manager.db.repositories.changelog import ChangeLogRepository
