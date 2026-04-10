@@ -549,10 +549,14 @@ def config_init(
 # ---------------------------------------------------------------------------
 
 
+def _redraw(num_lines: int) -> None:
+    """Move cursor up *num_lines* and clear to end of screen."""
+    sys.stdout.write(f"\x1b[{num_lines}A\x1b[J")
+    sys.stdout.flush()
+
+
 def _prompt_archetype_rich(default_key: str = "analysis") -> str:
     """Show a Rich-formatted archetype picker."""
-    from rich.live import Live
-
     from data_project_manager.core.templates import BUILT_IN_ARCHETYPES
 
     keys = list(BUILT_IN_ARCHETYPES)
@@ -569,47 +573,49 @@ def _prompt_archetype_rich(default_key: str = "analysis") -> str:
     if not interactive:
         return _prompt_archetype_numbered(keys, BUILT_IN_ARCHETYPES, cursor)
 
-    def build_display(*, show_cursor: bool = True) -> Text:
-        t = Text()
-        t.append("Project type", style="bold")
-        t.append("  ↑↓ move · Enter select\n", style="dim")
+    # Number of printed lines: 1 header + len(keys) items.
+    num_lines = 1 + len(keys)
+
+    def render() -> None:
+        _console.print("[bold]Project type[/]  [dim]↑↓ move · Enter select[/]")
         for i, key in enumerate(keys):
             arch = BUILT_IN_ARCHETYPES[key]
-            is_cur = show_cursor and i == cursor
-            num = f"[{i + 1}]"
-            padded = f"{arch.label:<12s}"
+            is_cur = i == cursor
             if is_cur:
-                t.append("  ❯ ", style="bold cyan")
-                t.append(f"{num} ", style="dim")
-                t.append(padded, style="bold")
+                marker = "[bold cyan]❯[/]"
+                style = "bold"
             else:
-                t.append(f"    {num} ", style="dim")
-                t.append(padded)
-            t.append(f"  {arch.description}", style="dim")
-            if i < len(keys) - 1:
-                t.append("\n")
-        return t
+                marker = " "
+                style = ""
+            padded = f"{arch.label:<12s}"
+            label = f"[{style}]{padded}[/{style}]" if style else padded
+            num = f"[dim]\\[{i + 1}][/dim]"
+            _console.print(f"  {marker} {num} {label}  [dim]{arch.description}[/dim]")
 
     _console.print()
-    with Live(
-        build_display(), console=_console, auto_refresh=False, transient=True
-    ) as live:
-        while True:
-            key = _read_key()
-            if key == "up" and cursor > 0:
-                cursor -= 1
-            elif key == "down" and cursor < len(keys) - 1:
-                cursor += 1
-            elif key == "enter":
-                live.update(build_display(show_cursor=False), refresh=True)
+    render()
+    while True:
+        key = _read_key()
+        if key == "up" and cursor > 0:
+            cursor -= 1
+        elif key == "down" and cursor < len(keys) - 1:
+            cursor += 1
+        elif key == "enter":
+            _redraw(num_lines)
+            render()
+            break
+        elif key.isdigit():
+            n = int(key)
+            if 1 <= n <= len(keys):
+                cursor = n - 1
+                _redraw(num_lines)
+                render()
                 break
-            elif key.isdigit():
-                n = int(key)
-                if 1 <= n <= len(keys):
-                    cursor = n - 1
-                    live.update(build_display(show_cursor=False), refresh=True)
-                    break
-            live.update(build_display(), refresh=True)
+            continue
+        else:
+            continue
+        _redraw(num_lines)
+        render()
 
     return keys[cursor]
 
@@ -645,10 +651,12 @@ def _prompt_archetype_numbered(
 
 
 def _read_key() -> str:
-    """Read a single keypress.
+    """Read a single keypress via raw terminal I/O.
 
-    Returns 'up', 'down', 'space', 'enter', 'escape', 'q', or ''.
+    Returns 'up', 'down', 'space', 'enter', 'escape', 'q',
+    a digit character, or ''.
     """
+    import os
     import select
 
     try:
@@ -660,24 +668,25 @@ def _read_key() -> str:
     old = termios.tcgetattr(fd)
     try:
         tty.setraw(fd)
-        ch = sys.stdin.read(1)
-        if ch == "\x1b":
-            # Check if an arrow sequence follows (within 50 ms).
-            ready, _, _ = select.select([sys.stdin], [], [], 0.05)
-            if ready and sys.stdin.read(1) == "[":
-                arrow = sys.stdin.read(1)
-                return {"A": "up", "B": "down"}.get(arrow, "")
+        ch = os.read(fd, 1)
+        if ch == b"\x1b":
+            # Arrow keys send \x1b[A / \x1b[B — peek for more bytes.
+            ready, _, _ = select.select([fd], [], [], 0.05)
+            if ready and os.read(fd, 1) == b"[":
+                arrow = os.read(fd, 1)
+                return {b"A": "up", b"B": "down"}.get(arrow, "")
             return "escape"
-        if ch == " ":
+        if ch == b" ":
             return "space"
-        if ch in ("\r", "\n"):
+        if ch in (b"\r", b"\n"):
             return "enter"
-        if ch == "\x03":
+        if ch == b"\x03":
             raise KeyboardInterrupt
-        if ch == "q":
+        if ch == b"q":
             return "q"
-        if ch.isdigit():
-            return ch
+        decoded = ch.decode("ascii", errors="ignore")
+        if decoded.isdigit():
+            return decoded
         return ""
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old)
@@ -685,6 +694,7 @@ def _read_key() -> str:
 
 def _read_key_timeout(timeout: float) -> str | None:
     """Read a keypress with timeout. Returns None on timeout."""
+    import os
     import select
 
     try:
@@ -696,27 +706,25 @@ def _read_key_timeout(timeout: float) -> str | None:
     old = termios.tcgetattr(fd)
     try:
         tty.setraw(fd)
-        ready, _, _ = select.select([sys.stdin], [], [], timeout)
+        ready, _, _ = select.select([fd], [], [], timeout)
         if not ready:
             return None
-        ch = sys.stdin.read(1)
-        if ch in ("\r", "\n"):
+        ch = os.read(fd, 1)
+        if ch in (b"\r", b"\n"):
             return "enter"
-        if ch == "\x1b":
+        if ch == b"\x1b":
             return "escape"
-        if ch == "q":
+        if ch == b"q":
             return "q"
-        if ch == "\x03":
+        if ch == b"\x03":
             raise KeyboardInterrupt
-        return ch
+        return ch.decode("ascii", errors="ignore")
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old)
 
 
 def _prompt_folder_toggles_rich(current: list[str]) -> list[str]:
     """Interactive folder picker with arrow keys, Space, and Enter."""
-    from rich.live import Live
-
     from data_project_manager.core.templates import (
         OPTIONAL_FOLDERS,
         SRC_TOGGLES,
@@ -727,8 +735,7 @@ def _prompt_folder_toggles_rich(current: list[str]) -> list[str]:
     selected = set(current)
     cursor = 0
 
-    # Fall back to number-based input when stdin is not a real terminal
-    # (e.g. piped input, test runners, Windows without tty support).
+    # Fall back to number-based input when stdin is not a real terminal.
     try:
         import termios as _termios  # noqa: F401
 
@@ -739,67 +746,61 @@ def _prompt_folder_toggles_rich(current: list[str]) -> list[str]:
     if not interactive:
         return _prompt_folder_toggles_numbered(display_order, selected)
 
-    def build_display(*, show_cursor: bool = True) -> Text:
-        t = Text()
-        t.append("Folders", style="bold")
-        t.append("  ↑↓ move · Space toggle · Enter confirm\n", style="dim")
+    num_lines = 1 + len(display_order)
+
+    def render() -> None:
+        _console.print(
+            "[bold]Folders[/]  [dim]↑↓ move · Space toggle · Enter confirm[/]"
+        )
         for i, key in enumerate(display_order):
-            is_cur = show_cursor and i == cursor
+            is_cur = i == cursor
             indent = "    " if key in SRC_TOGGLES else ""
             label = f"src/{key}/" if key in SRC_TOGGLES else f"{key}/"
-            t.append("  ❯ " if is_cur else "    ", style="bold cyan" if is_cur else "")
-            t.append(
-                "✓" if key in selected else "○",
-                style="green" if key in selected else "dim",
-            )
+            marker = "[bold cyan]❯[/]" if is_cur else " "
+            check = "[green]✓[/]" if key in selected else "[dim]○[/]"
             style = "bold" if is_cur else ""
-            padded = f" {indent}{label}"
-            if style:
-                t.append(padded, style=style)
-            else:
-                t.append(padded)
-            if i < len(display_order) - 1:
-                t.append("\n")
-        return t
+            name = f"{indent}{label}"
+            styled = f"[{style}]{name}[/{style}]" if style else name
+            _console.print(f"  {marker} {check} {styled}")
 
     _console.print()
-    with Live(
-        build_display(), console=_console, auto_refresh=False, transient=True
-    ) as live:
-        while True:
-            key = _read_key()
-            if key == "up" and cursor > 0:
-                cursor -= 1
-            elif key == "down" and cursor < len(display_order) - 1:
-                cursor += 1
-            elif key == "space":
-                selected.symmetric_difference_update({display_order[cursor]})
-            elif key == "enter":
-                live.update(build_display(show_cursor=False), refresh=True)
-                break
-            live.update(build_display(), refresh=True)
+    render()
+    while True:
+        key = _read_key()
+        if key == "up" and cursor > 0:
+            cursor -= 1
+        elif key == "down" and cursor < len(display_order) - 1:
+            cursor += 1
+        elif key == "space":
+            selected.symmetric_difference_update({display_order[cursor]})
+        elif key == "enter":
+            _redraw(num_lines)
+            render()
+            break
+        else:
+            continue
+        _redraw(num_lines)
+        render()
 
     result = resolve_folders(sorted(selected))
 
     # Confirmation countdown — wait 3 s, Enter to skip, Esc/q to abort.
     folder_str = ", ".join(f"{f}/" for f in result) if result else "(none)"
     _console.print(f"[dim]Selected:[/] {folder_str}")
-
-    with Live(console=_console, auto_refresh=False, transient=True) as live:
-        for remaining in range(3, 0, -1):
-            live.update(
-                Text(
-                    f"Confirming in {remaining}s… (Enter to skip, Esc to abort)",
-                    style="dim",
-                ),
-                refresh=True,
-            )
-            pressed = _read_key_timeout(1.0)
-            if pressed == "enter":
-                break
-            if pressed in ("escape", "q", "\x1b"):
-                _console.print("[yellow]Aborted.[/]")
-                raise typer.Abort()
+    for remaining in range(3, 0, -1):
+        _console.print(
+            f"[dim]Confirming in {remaining}s… (Enter to skip, Esc to abort)[/]",
+            end="\r",
+        )
+        pressed = _read_key_timeout(1.0)
+        if pressed == "enter":
+            _console.print()
+            break
+        if pressed in ("escape", "q"):
+            _console.print("\n[yellow]Aborted.[/]")
+            raise typer.Abort()
+    else:
+        _console.print()
 
     return result
 
