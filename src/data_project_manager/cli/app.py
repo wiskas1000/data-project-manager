@@ -695,9 +695,9 @@ def _prompt_folder_toggles_rich(current: list[str]) -> list[str]:
             elif key == "space":
                 selected.symmetric_difference_update({display_order[cursor]})
             elif key == "enter":
-                live.update(build_display(show_cursor=False))
+                live.update(build_display(show_cursor=False), refresh=True)
                 break
-            live.update(build_display())
+            live.update(build_display(), refresh=True)
 
     result = resolve_folders(sorted(selected))
 
