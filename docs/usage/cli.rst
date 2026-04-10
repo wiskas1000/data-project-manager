@@ -177,11 +177,12 @@ Export project metadata as structured JSON.
 
 **Options**:
 
-==================== =================================
+==================== =====================================================
 ``--all``            Export all projects (index)
 ``--output FILE``    Write to file instead of stdout
 ``--compact``        Minified JSON (no indentation)
-==================== =================================
+``--redact``         Replace personal data (names, emails) with [REDACTED]
+==================== =====================================================
 
 When ``SLUG`` is omitted, exports the full index (same as ``--all``).
 
