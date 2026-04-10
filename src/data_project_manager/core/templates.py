@@ -102,6 +102,22 @@ def folder_display_order() -> list[str]:
     return order
 
 
+def toggle_folder(selected: set[str], key: str) -> None:
+    """Toggle a folder key in *selected*, enforcing parent/child links.
+
+    * Deselecting ``src`` also deselects every entry in :data:`SRC_TOGGLES`.
+    * Selecting a ``SRC_TOGGLES`` entry also selects ``src``.
+    """
+    if key in selected:
+        selected.discard(key)
+        if key == "src":
+            selected -= set(SRC_TOGGLES)
+    else:
+        selected.add(key)
+        if key in SRC_TOGGLES:
+            selected.add("src")
+
+
 # ---------------------------------------------------------------------------
 # Archetype dataclass and built-in presets
 # ---------------------------------------------------------------------------
