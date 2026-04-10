@@ -170,7 +170,7 @@ Unit tests: search query parsing, filter combinations, FTS5 integration. Integra
 - [x] All CLI commands have `--help` with examples
 - [x] Test coverage ≥ 85% (achieved 94%)
 - [ ] Cross-platform: tested on Windows + Unix
-- [ ] Zero-dep mode verified (uninstall Typer, confirm argparse works)
+- [x] Zero-dep mode verified (uninstall Typer, confirm argparse works)
 - [x] CHANGELOG complete v0.1.0 through v1.0.0
 - [x] README: quickstart, feature overview, library API intro, install instructions
 
