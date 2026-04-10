@@ -85,6 +85,23 @@ OPTIONAL_FOLDERS: list[str] = [
     "resultaten",
 ]
 
+
+def folder_display_order() -> list[str]:
+    """Return folder keys ordered for toggle display.
+
+    ``SRC_TOGGLES`` (notebooks, queries) appear directly after ``src``
+    so the visual hierarchy matches the filesystem layout.
+    """
+    order: list[str] = []
+    for f in OPTIONAL_FOLDERS:
+        if f in SRC_TOGGLES:
+            continue
+        order.append(f)
+        if f == "src":
+            order.extend(SRC_TOGGLES)
+    return order
+
+
 # ---------------------------------------------------------------------------
 # Archetype dataclass and built-in presets
 # ---------------------------------------------------------------------------
