@@ -567,7 +567,8 @@ def _prompt_archetype_rich(default_key: str = "analysis") -> str:
             style = ""
         padded = f"{arch.label:<12s}"
         label = f"[{style}]{padded}[/{style}]" if style else padded
-        _console.print(f"  {marker} {label}  [dim]{arch.description}[/dim]")
+        num = f"[dim][{i}][/dim]"
+        _console.print(f"  {marker} {num} {label}  [dim]{arch.description}[/dim]")
 
     raw = typer.prompt(f"Select [1-{len(keys)}]", default=str(default_idx))
     try:
