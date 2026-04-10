@@ -684,7 +684,7 @@ def _prompt_folder_toggles_rich(current: list[str]) -> list[str]:
 
     _console.print()
     with Live(
-        build_display(), console=_console, refresh_per_second=15, transient=True
+        build_display(), console=_console, auto_refresh=False, transient=True
     ) as live:
         while True:
             key = _read_key()
