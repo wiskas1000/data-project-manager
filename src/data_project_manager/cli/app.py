@@ -551,14 +551,78 @@ def config_init(
 
 def _prompt_archetype_rich(default_key: str = "analysis") -> str:
     """Show a Rich-formatted archetype picker."""
+    from rich.live import Live
+
     from data_project_manager.core.templates import BUILT_IN_ARCHETYPES
 
     keys = list(BUILT_IN_ARCHETYPES)
-    default_idx = keys.index(default_key) + 1 if default_key in keys else 2
+    cursor = keys.index(default_key) if default_key in keys else 1
 
+    # Fall back to number-based when not interactive.
+    try:
+        import termios as _termios  # noqa: F401
+
+        interactive = sys.stdin.isatty()
+    except ImportError:
+        interactive = False
+
+    if not interactive:
+        return _prompt_archetype_numbered(keys, BUILT_IN_ARCHETYPES, cursor)
+
+    def build_display(*, show_cursor: bool = True) -> Text:
+        t = Text()
+        t.append("Project type", style="bold")
+        t.append("  ↑↓ move · Enter select\n", style="dim")
+        for i, key in enumerate(keys):
+            arch = BUILT_IN_ARCHETYPES[key]
+            is_cur = show_cursor and i == cursor
+            num = f"[{i + 1}]"
+            padded = f"{arch.label:<12s}"
+            if is_cur:
+                t.append("  ❯ ", style="bold cyan")
+                t.append(f"{num} ", style="dim")
+                t.append(padded, style="bold")
+            else:
+                t.append(f"    {num} ", style="dim")
+                t.append(padded)
+            t.append(f"  {arch.description}", style="dim")
+            if i < len(keys) - 1:
+                t.append("\n")
+        return t
+
+    _console.print()
+    with Live(
+        build_display(), console=_console, auto_refresh=False, transient=True
+    ) as live:
+        while True:
+            key = _read_key()
+            if key == "up" and cursor > 0:
+                cursor -= 1
+            elif key == "down" and cursor < len(keys) - 1:
+                cursor += 1
+            elif key == "enter":
+                live.update(build_display(show_cursor=False), refresh=True)
+                break
+            elif key.isdigit():
+                n = int(key)
+                if 1 <= n <= len(keys):
+                    cursor = n - 1
+                    live.update(build_display(show_cursor=False), refresh=True)
+                    break
+            live.update(build_display(), refresh=True)
+
+    return keys[cursor]
+
+
+def _prompt_archetype_numbered(
+    keys: list[str],
+    archetypes: dict,
+    default_idx: int,
+) -> str:
+    """Number-based archetype picker for non-interactive terminals."""
     _console.print("\n[bold]Project type:[/]")
-    for i, key in enumerate(keys, 1):
-        arch = BUILT_IN_ARCHETYPES[key]
+    for i, key in enumerate(keys):
+        arch = archetypes[key]
         if i == default_idx:
             marker = "[bold cyan]❯[/]"
             style = "bold"
@@ -567,21 +631,26 @@ def _prompt_archetype_rich(default_key: str = "analysis") -> str:
             style = ""
         padded = f"{arch.label:<12s}"
         label = f"[{style}]{padded}[/{style}]" if style else padded
-        num = f"[dim][{i}][/dim]"
+        num = f"[dim][{i + 1}][/dim]"
         _console.print(f"  {marker} {num} {label}  [dim]{arch.description}[/dim]")
 
-    raw = typer.prompt(f"Select [1-{len(keys)}]", default=str(default_idx))
+    raw = typer.prompt(f"Select [1-{len(keys)}]", default=str(default_idx + 1))
     try:
         choice = int(raw)
         if 1 <= choice <= len(keys):
             return keys[choice - 1]
     except ValueError:
         pass
-    return default_key
+    return keys[default_idx]
 
 
 def _read_key() -> str:
-    """Read a single keypress. Returns 'up', 'down', 'space', 'enter', or ''."""
+    """Read a single keypress.
+
+    Returns 'up', 'down', 'space', 'enter', 'escape', 'q', or ''.
+    """
+    import select
+
     try:
         import termios
         import tty
@@ -593,16 +662,22 @@ def _read_key() -> str:
         tty.setraw(fd)
         ch = sys.stdin.read(1)
         if ch == "\x1b":
-            if sys.stdin.read(1) == "[":
+            # Check if an arrow sequence follows (within 50 ms).
+            ready, _, _ = select.select([sys.stdin], [], [], 0.05)
+            if ready and sys.stdin.read(1) == "[":
                 arrow = sys.stdin.read(1)
                 return {"A": "up", "B": "down"}.get(arrow, "")
-            return ""
+            return "escape"
         if ch == " ":
             return "space"
         if ch in ("\r", "\n"):
             return "enter"
         if ch == "\x03":
             raise KeyboardInterrupt
+        if ch == "q":
+            return "q"
+        if ch.isdigit():
+            return ch
         return ""
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old)
@@ -627,6 +702,10 @@ def _read_key_timeout(timeout: float) -> str | None:
         ch = sys.stdin.read(1)
         if ch in ("\r", "\n"):
             return "enter"
+        if ch == "\x1b":
+            return "escape"
+        if ch == "q":
+            return "q"
         if ch == "\x03":
             raise KeyboardInterrupt
         return ch
@@ -702,17 +781,25 @@ def _prompt_folder_toggles_rich(current: list[str]) -> list[str]:
 
     result = resolve_folders(sorted(selected))
 
-    # Confirmation countdown — wait 3 s or press Enter to skip.
+    # Confirmation countdown — wait 3 s, Enter to skip, Esc/q to abort.
     folder_str = ", ".join(f"{f}/" for f in result) if result else "(none)"
     _console.print(f"[dim]Selected:[/] {folder_str}")
 
-    with Live(console=_console, refresh_per_second=4, transient=True) as live:
+    with Live(console=_console, auto_refresh=False, transient=True) as live:
         for remaining in range(3, 0, -1):
             live.update(
-                Text(f"Confirming in {remaining}s… (Enter to skip)", style="dim")
+                Text(
+                    f"Confirming in {remaining}s… (Enter to skip, Esc to abort)",
+                    style="dim",
+                ),
+                refresh=True,
             )
-            if _read_key_timeout(1.0) == "enter":
+            pressed = _read_key_timeout(1.0)
+            if pressed == "enter":
                 break
+            if pressed in ("escape", "q", "\x1b"):
+                _console.print("[yellow]Aborted.[/]")
+                raise typer.Abort()
 
     return result
 
