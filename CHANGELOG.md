@@ -7,6 +7,22 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- `core.search.search_project_metadata()` — substring (case-insensitive
+  `LIKE`) search over tag names, person name/email (current SCD2 row),
+  entity types, aggregation levels, request-question text, and
+  deliverable file paths. Returns `SearchResult` with `rank=0.0`
+  ordered by `created_at` descending. Takes an optional `exclude_ids`
+  arg for de-duping against a prior FTS5 result set. (#62)
+- `core.search.search_projects()` now accepts `entity_types`,
+  `aggregation_levels`, and `requestor` kwargs so filter buttons apply
+  uniformly to both the FTS5 and metadata search paths. (#62)
+
+---
+
 ## [1.1.2] — 2026-04-10
 
 ### Changed

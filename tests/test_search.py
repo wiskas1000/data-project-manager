@@ -5,8 +5,24 @@ import sqlite3
 import pytest
 from helpers import fresh_conn
 
-from data_project_manager.core.search import _execute_search
+from data_project_manager.core.search import (
+    _execute_metadata_search,
+    _execute_search,
+)
+from data_project_manager.db.repositories.data_file import (
+    AggregationLevelRepository,
+    DataFileAggregationRepository,
+    DataFileEntityTypeRepository,
+    DataFileRepository,
+    EntityTypeRepository,
+)
+from data_project_manager.db.repositories.deliverable import DeliverableRepository
+from data_project_manager.db.repositories.person import (
+    PersonRepository,
+    ProjectPersonRepository,
+)
 from data_project_manager.db.repositories.project import ProjectRepository
+from data_project_manager.db.repositories.question import RequestQuestionRepository
 from data_project_manager.db.repositories.tag import ProjectTagRepository, TagRepository
 
 
@@ -248,3 +264,194 @@ class TestSearchResultModel:
         results = _execute_search(search_conn, query="hospital")
         with pytest.raises(AttributeError):
             results[0].title = "changed"  # type: ignore[misc]
+
+
+# ---------------------------------------------------------------------------
+# Metadata (Tier 1 substring) search — issue #62
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def metadata_conn() -> sqlite3.Connection:
+    """Fresh DB seeded with metadata across every Tier 1 source."""
+    conn = fresh_conn()
+    projects = ProjectRepository(conn)
+    tags = TagRepository(conn)
+    ptags = ProjectTagRepository(conn)
+    people = PersonRepository(conn)
+    ppeople = ProjectPersonRepository(conn)
+    data_files = DataFileRepository(conn)
+    ets = EntityTypeRepository(conn)
+    aggs = AggregationLevelRepository(conn)
+    dfet = DataFileEntityTypeRepository(conn)
+    dfa = DataFileAggregationRepository(conn)
+    questions = RequestQuestionRepository(conn)
+    deliverables = DeliverableRepository(conn)
+
+    # Baseline project — matches nothing so it can be the "not found" control
+    projects.create(
+        title="Baseline",
+        slug="2026-01-01-baseline",
+        description="unrelated",
+    )
+
+    # Project matched only via tag
+    p_tag = projects.create(title="P tag", slug="2026-01-02-p-tag")
+    fraud = tags.create(name="fraud-detection")
+    ptags.add(project_id=p_tag.id, tag_id=fraud.id)
+
+    # Project matched only via person name/email, with a requestor role for filter test
+    p_person = projects.create(title="P person", slug="2026-01-03-p-person")
+    jane = people.create(
+        first_name="Jane",
+        last_name="Künzli",
+        email="jane.k@example.com",
+        department="Risk",
+    )
+    ppeople.add(project_id=p_person.id, person_id=jane.id, role="requestor")
+
+    # Project matched only via entity type
+    p_et = projects.create(title="P et", slug="2026-01-04-p-et")
+    df_et = data_files.create(project_id=p_et.id, file_path="a.csv")
+    customers = ets.get_by_name("customers")
+    assert customers is not None
+    dfet.add(data_file_id=df_et.id, entity_type_id=customers.id)
+
+    # Project matched only via aggregation level
+    p_agg = projects.create(title="P agg", slug="2026-01-05-p-agg")
+    df_agg = data_files.create(project_id=p_agg.id, file_path="b.csv")
+    quarterly = aggs.get_by_name("quarterly")
+    assert quarterly is not None
+    dfa.add(data_file_id=df_agg.id, agg_level_id=quarterly.id)
+
+    # Project matched only via request question text
+    p_q = projects.create(title="P question", slug="2026-01-06-p-question")
+    questions.create(
+        project_id=p_q.id,
+        question_text="What is the retention uplift from the loyalty programme?",
+    )
+
+    # Project matched only via deliverable file path
+    p_d = projects.create(title="P deliverable", slug="2026-01-07-p-deliverable")
+    deliverables.create(
+        project_id=p_d.id,
+        type="report",
+        file_path="output/annual-benchmark-2026.pdf",
+    )
+
+    # Project linked to a person row that has been retired (is_current=0).
+    # This simulates SCD2 closure; the link must be excluded from person
+    # substring matches.
+    p_old = projects.create(title="P old person", slug="2026-01-08-p-old-person")
+    bob = people.create(first_name="Bob", last_name="Obsolete")
+    ppeople.add(project_id=p_old.id, person_id=bob.id, role="reviewer")
+    conn.execute("UPDATE person SET is_current = 0 WHERE id = ?", (bob.id,))
+
+    # Project with a literal percent sign in a question (LIKE-escape test)
+    p_pct = projects.create(title="P pct", slug="2026-01-09-p-pct")
+    questions.create(project_id=p_pct.id, question_text="Margin at 50% of target?")
+
+    return conn
+
+
+class TestMetadataSubstringSearch:
+    """Each Tier 1 source surfaces projects on substring match."""
+
+    def test_tag_name_match(self, metadata_conn: sqlite3.Connection) -> None:
+        results = _execute_metadata_search(metadata_conn, query="fraud")
+        assert [r.slug for r in results] == ["2026-01-02-p-tag"]
+
+    def test_person_full_name_match(self, metadata_conn: sqlite3.Connection) -> None:
+        results = _execute_metadata_search(metadata_conn, query="jane künzli")
+        assert [r.slug for r in results] == ["2026-01-03-p-person"]
+
+    def test_person_email_match(self, metadata_conn: sqlite3.Connection) -> None:
+        results = _execute_metadata_search(metadata_conn, query="jane.k@example")
+        assert [r.slug for r in results] == ["2026-01-03-p-person"]
+
+    def test_entity_type_match(self, metadata_conn: sqlite3.Connection) -> None:
+        results = _execute_metadata_search(metadata_conn, query="customers")
+        assert [r.slug for r in results] == ["2026-01-04-p-et"]
+
+    def test_aggregation_level_match(self, metadata_conn: sqlite3.Connection) -> None:
+        results = _execute_metadata_search(metadata_conn, query="quarterly")
+        assert [r.slug for r in results] == ["2026-01-05-p-agg"]
+
+    def test_question_text_match(self, metadata_conn: sqlite3.Connection) -> None:
+        results = _execute_metadata_search(metadata_conn, query="loyalty")
+        assert [r.slug for r in results] == ["2026-01-06-p-question"]
+
+    def test_deliverable_path_match(self, metadata_conn: sqlite3.Connection) -> None:
+        results = _execute_metadata_search(metadata_conn, query="annual-benchmark")
+        assert [r.slug for r in results] == ["2026-01-07-p-deliverable"]
+
+    def test_case_insensitive(self, metadata_conn: sqlite3.Connection) -> None:
+        results = _execute_metadata_search(metadata_conn, query="FRAUD")
+        assert [r.slug for r in results] == ["2026-01-02-p-tag"]
+
+    def test_scd2_old_version_excluded(self, metadata_conn: sqlite3.Connection) -> None:
+        # Bob's person row has is_current=0; his name must not surface.
+        results = _execute_metadata_search(metadata_conn, query="obsolete")
+        assert results == []
+
+    def test_like_wildcard_is_escaped(self, metadata_conn: sqlite3.Connection) -> None:
+        # Literal "50%" should match only the question with "50%"; raw "%"
+        # otherwise would match everything.
+        results = _execute_metadata_search(metadata_conn, query="50%")
+        assert [r.slug for r in results] == ["2026-01-09-p-pct"]
+
+    def test_no_match(self, metadata_conn: sqlite3.Connection) -> None:
+        results = _execute_metadata_search(metadata_conn, query="zzznope")
+        assert results == []
+
+    def test_exclude_ids(self, metadata_conn: sqlite3.Connection) -> None:
+        first = _execute_metadata_search(metadata_conn, query="fraud")
+        again = _execute_metadata_search(
+            metadata_conn, query="fraud", exclude_ids=[r.id for r in first]
+        )
+        assert again == []
+
+
+class TestMetadataFilters:
+    """Structured filters apply on top of the Tier 1 substring."""
+
+    def test_requestor_filter_on_search_projects(
+        self, metadata_conn: sqlite3.Connection
+    ) -> None:
+        # FTS5 path: seeded project title "P person" is searchable; requestor
+        # filter narrows to the same project.
+        results = _execute_search(metadata_conn, query="person", requestor="jane")
+        assert [r.slug for r in results] == ["2026-01-03-p-person"]
+
+    def test_requestor_filter_excludes_non_requestor_role(
+        self, metadata_conn: sqlite3.Connection
+    ) -> None:
+        # Bob's only link is role='reviewer' — filtering by requestor="bob"
+        # must exclude his project.
+        results = _execute_search(metadata_conn, requestor="bob")
+        assert results == []
+
+    def test_entity_type_filter(self, metadata_conn: sqlite3.Connection) -> None:
+        results = _execute_search(metadata_conn, entity_types=["customers"])
+        assert [r.slug for r in results] == ["2026-01-04-p-et"]
+
+    def test_aggregation_level_filter(self, metadata_conn: sqlite3.Connection) -> None:
+        results = _execute_search(metadata_conn, aggregation_levels=["quarterly"])
+        assert [r.slug for r in results] == ["2026-01-05-p-agg"]
+
+    def test_metadata_search_with_filter(
+        self, metadata_conn: sqlite3.Connection
+    ) -> None:
+        # Substring match returns p_person; requestor filter keeps it;
+        # requestor filter for a different name removes it.
+        kept = _execute_metadata_search(metadata_conn, query="jane", requestor="jane")
+        assert [r.slug for r in kept] == ["2026-01-03-p-person"]
+        empty = _execute_metadata_search(metadata_conn, query="jane", requestor="alice")
+        assert empty == []
+
+    def test_metadata_search_filter_only(
+        self, metadata_conn: sqlite3.Connection
+    ) -> None:
+        # No query, just filter — returns all projects matching the filter.
+        results = _execute_metadata_search(metadata_conn, entity_types=["customers"])
+        assert [r.slug for r in results] == ["2026-01-04-p-et"]
