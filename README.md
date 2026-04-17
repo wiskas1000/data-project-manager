@@ -202,6 +202,8 @@ See [docs/PLAN.md](docs/PLAN.md) for the full milestone plan.
 | Docs & v1 Release | **v1.0.0** | Coverage, documentation, stability |
 | Folder Archetypes & CLI Polish | v1.1.0 | Archetype picker, arrow-key toggles, `--type`/`--folder`/`--add`/`--remove` flags |
 | Privacy & UI Fixes | v1.1.1 | `--redact` flag, folder toggle dependency fix, display order fix |
+| Maintenance | v1.1.2 | Remove unused `row_to_dict()` helper; doc and test top-ups |
+| Metadata Search | v1.2.0 | `search_project_metadata()` (tags, people, entity types, agg levels, questions, deliverables); new `entity_types` / `aggregation_levels` / `requestor` filter kwargs on `search_projects()` |
 
 ## Privacy
 
